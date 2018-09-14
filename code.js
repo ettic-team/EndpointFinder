@@ -9,3 +9,5 @@ xhr.send(null);
 function test(a) {
 	var a = 123;
 }
+
+test(xhr);
