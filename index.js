@@ -2,6 +2,10 @@ var acorn = require("acorn");
 var _ = require("lodash");
 var fs = require("fs");
 
+/**
+ * Classes to represent the stucture used in the utility.
+ */
+
 function Reference(name) {
 	this.name = name;
 }
@@ -24,9 +28,27 @@ function GlobalFunctionCall(name) {
 	this.name = name;
 }
 
+function MemberExpression(parts) {
+	this.parts = parts;
+}
+
 function Unknown() {
 
 }
+
+function FunctionInvocation() {
+	this.fnct = null;
+	this.arguments = [];
+}
+
+function AnalysisResult() {
+	this.assignations = new Map();
+	this.invocations = [];
+}
+
+/**
+ * Analysis function
+ */
 
 function collectVar(tree, _collectVar, collectLet) {
 	var variables = [];
@@ -70,6 +92,22 @@ function collectFunction(tree) {
 	return functions;
 }
 
+function flattenMemberExpression(memberExpression, scope) {
+	var result;
+	var property = (memberExpression.computed) ? 
+			toSymbolic(memberExpression.property, scope) : 
+			new Constant(memberExpression.property.name);
+
+	if (memberExpression.object.type === "MemberExpression") {
+		result = flattenMemberExpression(memberExpression.object, scope);
+		result.push(property);
+	} else {
+		result = [toSymbolic(memberExpression.object, scope), property];
+	}
+
+	return result;
+}
+
 function toSymbolic(tree, scope) {
 	switch (tree.type) {
 		case "Literal":
@@ -83,6 +121,10 @@ function toSymbolic(tree, scope) {
 				return new Concatenation(toSymbolic(tree.left, scope), toSymbolic(tree.right, scope));
 			}
 			break;
+
+		case "MemberExpression":
+			let memberExpression = flattenMemberExpression(tree, scope);
+			return new MemberExpression(memberExpression);
 
 		case "NewExpression":
 			if (tree.callee.type === "Identifier") {
@@ -100,12 +142,12 @@ function toSymbolic(tree, scope) {
 }
 
 function mergeResult(result1, result2) {
-	result2.forEach(function (value, key, map) {
-		result1.set(key, value);
+	result2.assignations.forEach(function (value, key, map) {
+		result1.assignations.set(key, value);
 	});
 }
 
-function analysis(tree, result = new Map(), scope = new Map(), scopeName = "G$", partialScope = false) {
+function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeName = "G$", partialScope = false) {
 	if (!tree.body) {
 		return new Map();
 	}
@@ -130,14 +172,29 @@ function analysis(tree, result = new Map(), scope = new Map(), scopeName = "G$",
 				for (let j=0; j<element.declarations.length; j++) {
 					let variable = element.declarations[j];
 					if (variable.init) {
-						result.set(new Reference(newScope.get(variable.id.name)), toSymbolic(variable.init, newScope));
+						result.assignations.set(new Reference(newScope.get(variable.id.name)), toSymbolic(variable.init, newScope));
 					}
 				}
 				break;
 
 			case "ExpressionStatement":
-				if (element.expression.type === "AssignmentExpression") {
-					result.set(toSymbolic(element.expression.left, newScope), toSymbolic(element.expression.right, newScope));
+				switch(element.expression.type) {
+					case "AssignmentExpression":
+						result.assignations.set(toSymbolic(element.expression.left, newScope), toSymbolic(element.expression.right, newScope));
+						break;
+
+					case "CallExpression":
+						let invocation = new FunctionInvocation();
+						invocation.fnct = toSymbolic(element.expression.callee, newScope);
+						invocation.arguments = [];
+
+						for (let j=0; j<element.expression.arguments.length; j++) {
+							invocation.arguments.push(toSymbolic(element.expression.arguments[j], newScope));
+						}
+
+						console.log("Adding call expression");
+						result.invocations.push(invocation);
+						break;
 				}
 				break;
 
@@ -172,4 +229,7 @@ var code = fs.readFileSync("code.js");
 var tree = acorn.parse(code);
 
 console.log(JSON.stringify(tree));
-console.log(analysis(tree));
+
+var result = analysis(tree);
+console.log(result.invocations);
+console.log(result.assignations);
