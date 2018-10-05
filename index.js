@@ -10,8 +10,16 @@ function Reference(name) {
 	this.name = name;
 }
 
+Reference.prototype.toHumanValue = function () {
+	return "@{" + this.name.split("$").pop() + "}";
+}
+
 function Constant(value) {
 	this.value = value;
+}
+
+Constant.prototype.toHumanValue = function () {
+	return this.value;
 }
 
 function Concatenation(value1, value2) {
@@ -20,20 +28,69 @@ function Concatenation(value1, value2) {
 	this.values.push(value2);
 }
 
-function LocalFunctionCall(reference) {
+Concatenation.prototype.toHumanValue = function () {
+	var result = "";
+	for (let i=0; i<this.values.length; i++) {
+		result += this.values[i].toHumanValue();
+	}
+	return result;
+}
+
+function LocalFunctionCall(reference, args) {
+	this.arguments = args;
 	this.reference = reference;
 }
 
-function GlobalFunctionCall(name) {
+LocalFunctionCall.prototype.toHumanValue = function () {
+	var result = this.reference.toHumanValue() + "(";
+	for (let i=0; i<this.arguments.length; i++) {
+		result += this.arguments[i].toHumanValue() + ",";
+	}
+	result = result.substring(0, result.length - 1) + ")";
+	return result;
+}
+
+function GlobalFunctionCall(name, args) {
 	this.name = name;
+	this.arguments = args;
+}
+
+GlobalFunctionCall.prototype.toHumanValue = function () {
+	var result = this.name + "(";
+	for (let i=0; i<this.arguments.length; i++) {
+		result += this.arguments[i].toHumanValue();
+		if (i !== this.arguments.length - 1) {
+			result += ",";
+		}
+	}
+	result += ")";
+	return result;
+}
+
+function ObjectFunctionCall(members, args) {
+	this.members = members;
+	this.arguments = args;
 }
 
 function MemberExpression(parts) {
 	this.parts = parts;
 }
 
+MemberExpression.prototype.toHumanValue = function () {
+	var result = "";
+	for (let i=0; i<this.parts.length; i++) {
+		result += this.parts[i].toHumanValue() + ".";
+	}
+	result = result.substring(0, result.length - 1);
+	return result;
+}
+
 function Unknown() {
 
+}
+
+Unknown.prototype.toHumanValue = function () {
+	return "@{UNKNOWN}";
 }
 
 function FunctionInvocation() {
@@ -44,6 +101,11 @@ function FunctionInvocation() {
 function AnalysisResult() {
 	this.assignations = new Map();
 	this.invocations = [];
+}
+
+function Context(scope, result) {
+	this.scope = scope;
+	this.result = result;
 }
 
 /**
@@ -92,49 +154,92 @@ function collectFunction(tree) {
 	return functions;
 }
 
-function flattenMemberExpression(memberExpression, scope) {
+function flattenMemberExpression(memberExpression, context) {
 	var result;
 	var property = (memberExpression.computed) ? 
-			toSymbolic(memberExpression.property, scope) : 
+			toSymbolic(memberExpression.property, context) : 
 			new Constant(memberExpression.property.name);
 
 	if (memberExpression.object.type === "MemberExpression") {
-		result = flattenMemberExpression(memberExpression.object, scope);
+		result = flattenMemberExpression(memberExpression.object, context);
 		result.push(property);
 	} else {
-		result = [toSymbolic(memberExpression.object, scope), property];
+		result = [toSymbolic(memberExpression.object, context), property];
 	}
 
 	return result;
 }
 
-function toSymbolic(tree, scope) {
+function resolveReference(variableName, context) {
+	let referenceIdentifier = context.scope.get(variableName);
+
+	if (context.result.assignations.has(referenceIdentifier)) {
+		return context.result.assignations.get(referenceIdentifier);
+	} else {
+		console.log("No reference to variable " + variableName + " (" + referenceIdentifier + ") found.");
+		if (typeof referenceIdentifier === "undefined") {
+			referenceIdentifier = variableName;
+		}
+		return new Reference(referenceIdentifier);
+	}
+}
+
+function toSymbolic(tree, context, resolveIdentfier = true) {
 	switch (tree.type) {
 		case "Literal":
 			return new Constant(tree.value);
 
 		case "Identifier":
-			return new Reference(scope.get(tree.name));
+			if (resolveIdentfier) {
+				let result = resolveReference(tree.name, context);
+				return result;
+			} else {
+				let referenceIdentifier = context.scope.get(tree.name);
+				return new Reference(referenceIdentifier);
+			}
 
 		case "BinaryExpression":
 			if (tree.operator === "+") {
-				return new Concatenation(toSymbolic(tree.left, scope), toSymbolic(tree.right, scope));
+				return new Concatenation(toSymbolic(tree.left, context), toSymbolic(tree.right, context));
 			}
 			break;
 
 		case "MemberExpression":
-			let memberExpression = flattenMemberExpression(tree, scope);
+			let memberExpression = flattenMemberExpression(tree, context);
 			return new MemberExpression(memberExpression);
 
 		case "NewExpression":
+			let args = [];
+			for (let i=0; i<tree.arguments.length; i++) {
+				args.push(toSymbolic(tree.arguments[i], context));	
+			}
+
 			if (tree.callee.type === "Identifier") {
 				let functionName = tree.callee.name;
-				if (scope.has(functionName)) {
-					return new LocalFunctionCall(scope.get(functionName));
+
+				if (context.scope.has(functionName)) {
+					return new LocalFunctionCall(context.scope.get(functionName), args);
 				} else {
-					return new GlobalFunctionCall(functionName);
+					return new GlobalFunctionCall(functionName, args);
 				}
 			}
+
+			if (tree.callee.type === "MemberExpression") {
+				let members = flattenMemberExpression(tree.callee);
+				return new ObjectFunctionCall(members, args);
+			}
+			break;
+
+		case "CallExpression":
+			let invocation = new FunctionInvocation();
+			invocation.fnct = toSymbolic(tree.callee, context);
+			invocation.arguments = [];
+
+			for (let j=0; j<tree.arguments.length; j++) {
+				invocation.arguments.push(toSymbolic(tree.arguments[j], context));
+			}
+
+			return invocation;
 			
 	}
 
@@ -164,6 +269,8 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 		newScope.set(variableName, scopeName + variableName);
 	}
 
+	var context = new Context(newScope, result);
+
 	for (let i=0; i<tree.body.length; i++) {
 		let element = tree.body[i];
 
@@ -172,7 +279,7 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 				for (let j=0; j<element.declarations.length; j++) {
 					let variable = element.declarations[j];
 					if (variable.init) {
-						result.assignations.set(new Reference(newScope.get(variable.id.name)), toSymbolic(variable.init, newScope));
+						result.assignations.set(newScope.get(variable.id.name), toSymbolic(variable.init, context));
 					}
 				}
 				break;
@@ -180,19 +287,17 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 			case "ExpressionStatement":
 				switch(element.expression.type) {
 					case "AssignmentExpression":
-						result.assignations.set(toSymbolic(element.expression.left, newScope), toSymbolic(element.expression.right, newScope));
+						let symbolicLeft = toSymbolic(element.expression.left, context, false);
+
+						if (symbolicLeft instanceof Reference) {
+							result.assignations.set(symbolicLeft.name, toSymbolic(element.expression.right, context));
+						} else {
+							result.assignations.set(symbolicLeft, toSymbolic(element.expression.right, context));
+						}
 						break;
 
 					case "CallExpression":
-						let invocation = new FunctionInvocation();
-						invocation.fnct = toSymbolic(element.expression.callee, newScope);
-						invocation.arguments = [];
-
-						for (let j=0; j<element.expression.arguments.length; j++) {
-							invocation.arguments.push(toSymbolic(element.expression.arguments[j], newScope));
-						}
-
-						console.log("Adding call expression");
+						let invocation = toSymbolic(element.expression, context);
 						result.invocations.push(invocation);
 						break;
 				}
@@ -227,9 +332,19 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 
 var code = fs.readFileSync("code.js");
 var tree = acorn.parse(code);
-
-console.log(JSON.stringify(tree));
-
 var result = analysis(tree);
-console.log(result.invocations);
-console.log(result.assignations);
+
+//console.log(JSON.stringify(tree));
+//console.log(JSON.stringify(result.invocations));
+//console.log(result.assignations);
+
+for (let i=0; i<result.invocations.length; i++) {
+	let fnctInvocation = result.invocations[i];
+	let output = fnctInvocation.fnct.toHumanValue();
+
+	output += "(";
+	output += fnctInvocation.arguments.map(function(arg) { return '"' + arg.toHumanValue() + '"'; }).join(",");
+	output += ")";
+
+	console.log(output);
+}
