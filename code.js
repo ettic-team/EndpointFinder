@@ -3,11 +3,14 @@ var b = a;
 b = a + "123";
 
 var xhr = new XMLHttpRequest();
-xhr.open("GET", a + "/" + alklk, true);
+xhr.open("GET", b + "/" + alklk, true);
 xhr.send(null);
 
-function test(a) {
-	var a = 123;
+function doXHR(url) {
+	var xhr = new XMLHttpRequest();
+	xhr.open("GET", url, true);
+	xhr.send(null);
 }
 
-test(xhr);
+doXHR(a);
+doXHR(a + "/abcd");

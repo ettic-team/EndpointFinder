@@ -6,13 +6,17 @@ var fs = require("fs");
  * Classes to represent the stucture used in the utility.
  */
 
+/// class Reference
+
 function Reference(name) {
 	this.name = name;
 }
 
 Reference.prototype.toHumanValue = function () {
-	return "@{" + this.name.split("$").pop() + "}";
+	return "@{ref(" + this.name.split("$").pop() + ")}";
 }
+
+/// class Constant
 
 function Constant(value) {
 	this.value = value;
@@ -21,6 +25,8 @@ function Constant(value) {
 Constant.prototype.toHumanValue = function () {
 	return this.value;
 }
+
+/// class Concatenation
 
 function Concatenation(value1, value2) {
 	this.values = [];
@@ -36,6 +42,8 @@ Concatenation.prototype.toHumanValue = function () {
 	return result;
 }
 
+/// class LocalFunctionCall
+
 function LocalFunctionCall(reference, args) {
 	this.arguments = args;
 	this.reference = reference;
@@ -49,6 +57,8 @@ LocalFunctionCall.prototype.toHumanValue = function () {
 	result = result.substring(0, result.length - 1) + ")";
 	return result;
 }
+
+/// class GlobalFunctionCall
 
 function GlobalFunctionCall(name, args) {
 	this.name = name;
@@ -67,10 +77,14 @@ GlobalFunctionCall.prototype.toHumanValue = function () {
 	return result;
 }
 
+/// class ObjectFunctionCall
+
 function ObjectFunctionCall(members, args) {
 	this.members = members;
 	this.arguments = args;
 }
+
+/// class MemberExpression
 
 function MemberExpression(parts) {
 	this.parts = parts;
@@ -85,6 +99,8 @@ MemberExpression.prototype.toHumanValue = function () {
 	return result;
 }
 
+/// class Unknown
+
 function Unknown() {
 
 }
@@ -93,15 +109,33 @@ Unknown.prototype.toHumanValue = function () {
 	return "@{UNKNOWN}";
 }
 
+/// class FunctionInvocation
+
 function FunctionInvocation() {
 	this.fnct = null;
 	this.arguments = [];
 }
 
+/// class FunctionArgument
+
+function FunctionArgument(fnct, variableName, position) {
+	this.name = variableName;
+	this.fnct = fnct;
+	this.position = position;
+}
+
+FunctionArgument.prototype.toHumanValue = function () {
+	return "@{arg" + this.position + "(" + this.name + ")}";
+}
+
+/// class AnalysusResult
+
 function AnalysisResult() {
 	this.assignations = new Map();
 	this.invocations = [];
 }
+
+/// class Context
 
 function Context(scope, result) {
 	this.scope = scope;
@@ -176,9 +210,8 @@ function resolveReference(variableName, context) {
 	if (context.result.assignations.has(referenceIdentifier)) {
 		return context.result.assignations.get(referenceIdentifier);
 	} else {
-		console.log("No reference to variable " + variableName + " (" + referenceIdentifier + ") found.");
 		if (typeof referenceIdentifier === "undefined") {
-			referenceIdentifier = variableName;
+			referenceIdentifier = "UG$" + variableName;
 		}
 		return new Reference(referenceIdentifier);
 	}
@@ -269,6 +302,17 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 		newScope.set(variableName, scopeName + variableName);
 	}
 
+	if (tree.type === "FunctionDeclaration") {
+		for (let i = 0; i < tree.params.length; i++) {
+			let arg = tree.params[i];
+
+			if (arg.type === "Identifier") {
+				newScope.set(arg.name, scopeName + arg.name);
+				result.assignations.set(scopeName + arg.name, new FunctionArgument(scope.get(tree.id.name) , arg.name, i));
+			}
+		}
+	}
+
 	var context = new Context(newScope, result);
 
 	for (let i=0; i<tree.body.length; i++) {
@@ -330,6 +374,44 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 	return result;
 }
 
+function postProcessingResolveArgument(arg, result) {
+	var output = [];
+
+	switch (arg.constructor.name) {
+		case "Constant":
+			output.push(arg.value);
+			break;
+
+		case "Concatenation":
+			let leftSide = postProcessingResolveArgument(arg.values[0], result);
+			let rightSide = postProcessingResolveArgument(arg.values[1], result);
+
+			for (let i=0; i<leftSide.length; i++) {
+				for (let j=0; j<rightSide.length; j++) {
+					output.push(leftSide[i] + rightSide[j]);
+				}
+			}
+
+			break;
+
+		case "FunctionArgument":
+			for (let i=0; i<result.invocations.length; i++) {
+				let invocation = result.invocations[i];
+
+				if (invocation.fnct.constructor.name === "Reference" && invocation.fnct.name === arg.fnct) {
+					output.push(postProcessingResolveArgument(invocation.arguments[arg.position], result));
+				}
+
+			}
+			break;
+
+		default:
+			output.push("@{VAR}");
+	}
+
+	return output;
+}
+
 var code = fs.readFileSync("code.js");
 var tree = acorn.parse(code);
 var result = analysis(tree);
@@ -340,11 +422,27 @@ var result = analysis(tree);
 
 for (let i=0; i<result.invocations.length; i++) {
 	let fnctInvocation = result.invocations[i];
-	let output = fnctInvocation.fnct.toHumanValue();
 
-	output += "(";
-	output += fnctInvocation.arguments.map(function(arg) { return '"' + arg.toHumanValue() + '"'; }).join(",");
-	output += ")";
 
-	console.log(output);
+	if (fnctInvocation.fnct.parts && 
+			fnctInvocation.fnct.parts[0].name === "XMLHttpRequest" &&
+			fnctInvocation.fnct.parts[1].value === "open") {
+
+		//let output = fnctInvocation.fnct.toHumanValue();
+
+		//output += "(";
+		//output += fnctInvocation.arguments.map(function(arg) { return '"' + arg.toHumanValue() + '"'; }).join(",");
+		//output += ")";
+
+		//console.log("----");
+		//console.log("Detected XHR call !");
+		//console.log(output);
+		//console.log("----");
+
+		let possibleValue = postProcessingResolveArgument(fnctInvocation.arguments[1], result);
+
+		for (let j=0; j<possibleValue.length; j++) {
+			console.log("Endpoint found : " + possibleValue[j]);
+		}
+	}
 }
