@@ -6,11 +6,11 @@ var xhr = new XMLHttpRequest();
 xhr.open("GET", b + "/" + alklk, true);
 xhr.send(null);
 
-function doXHR(url) {
+function doXHR(url, a) {
 	var xhr = new XMLHttpRequest();
-	xhr.open("GET", url, true);
+	xhr.open("GET", url + a, true);
 	xhr.send(null);
 }
 
-doXHR(a);
-doXHR(a + "/abcd");
+doXHR(a, 1);
+doXHR(a + "/abcd", 2);
