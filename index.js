@@ -16,6 +16,17 @@ Reference.prototype.toHumanValue = function () {
 	return "@{ref(" + this.name.split("$").pop() + ")}";
 }
 
+/// class ObjectStructure
+
+function ObjectStructure(type = "G$Object") {
+	this.properties = new Map();
+	this.type = type;
+}
+
+ObjectStructure.prototype.toHumanValue = function () {
+	return "@{obj(" + this.type + ")}";
+}
+
 /// class Constant
 
 function Constant(value) {
@@ -245,6 +256,30 @@ function resolveReference(variableName, context) {
 }
 
 /**
+ * Returns the resolved symbolic value of the "MemberExpression".
+ *
+ * @param flattenMemberExpression - Array of all the componenent of the MemberExpression.
+ * @param context                 - Context object
+ */
+function resolveMemberExpression(flattenMemberExpression, context) {
+	if (flattenMemberExpression[0].constructor.name === "ObjectStructure") {
+		let objStructure = flattenMemberExpression[0];
+		let keyValue = flattenMemberExpression[1];
+
+		if (keyValue.constructor.name === "Constant" && objStructure.properties.has(keyValue.value)) {
+			if (flattenMemberExpression.length > 2) {
+				let subsetMemberExpression = [objStructure.properties.get(keyValue.value)].concat(flattenMemberExpression.slice(2))
+				return resolveMemberExpression(subsetMemberExpression);
+			} else {
+				return objStructure.properties.get(keyValue.value);
+			}
+		}
+	}
+
+	return new MemberExpression(flattenMemberExpression);
+}
+
+/**
  * Returns the symbolic value of the AST object "tree".
  *
  * @param tree              - AST object
@@ -273,6 +308,11 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 
 		case "MemberExpression":
 			let memberExpression = flattenMemberExpression(tree, context);
+
+			if (resolveIdentfier) {
+				return resolveMemberExpression(memberExpression, context);
+			}
+
 			return new MemberExpression(memberExpression);
 
 		case "NewExpression":
@@ -296,6 +336,14 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 				return new ObjectFunctionCall(members, args);
 			}
 			break;
+
+		case "ObjectExpression":
+			let obj = new ObjectStructure();
+			for (let i=0; i<tree.properties.length; i++) {
+				let property = tree.properties[i];
+				obj.properties.set(property.key.value, toSymbolic(property.value, context));
+			}
+			return obj;
 
 		case "CallExpression":
 			let invocation = new FunctionInvocation();
@@ -522,6 +570,7 @@ var tree = acorn.parse(code);
 var result = analysis(tree);
 
 //console.log(JSON.stringify(tree));
+//console.log(result.invocations);
 //console.log(JSON.stringify(result.invocations));
 //console.log(result.assignations);
 
@@ -533,7 +582,7 @@ for (let i=0; i<result.invocations.length; i++) {
 			fnctInvocation.fnct.parts[0].name === "XMLHttpRequest" &&
 			fnctInvocation.fnct.parts[1].value === "open") {
 
-		let output = fnctInvocation.fnct.toHumanValue();
+		//let output = fnctInvocation.fnct.toHumanValue();
 
 		//output += "(";
 		//output += fnctInvocation.arguments.map(function(arg) { return '"' + arg.toHumanValue() + '"'; }).join(",");
