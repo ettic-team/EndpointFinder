@@ -16,3 +16,5 @@ function doXHR(url, a) {
 
 doXHR(a, 1);
 doXHR(a + "/abcd", 2);
+
+$.get("/test");

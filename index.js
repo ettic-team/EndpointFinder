@@ -791,15 +791,6 @@ function postProcessingResolveArgument(arg, result) {
 		output.push(res);
 	}
 
-	
-	//console.log("-------");
-	//console.log(arg);
-	//console.log("Arguments : ", functionArgs);
-	//console.log(resolvedFunctionArgs);
-	//console.log(functionArgsPosition);
-	//console.log(output);
-	//console.log("-------");
-
 	return output;
 }
 
@@ -807,11 +798,6 @@ function postProcessingResolveArgument(arg, result) {
 var code = fs.readFileSync("code.js");
 var tree = acorn.parse(code);
 var result = analysis(tree);
-
-//console.log(JSON.stringify(tree));
-//console.log(result.invocations);
-//console.log(JSON.stringify(result.invocations));
-//console.log(result.assignations);
 
 for (let i=0; i<result.invocations.length; i++) {
 	let fnctInvocation = result.invocations[i];
@@ -821,21 +807,21 @@ for (let i=0; i<result.invocations.length; i++) {
 			fnctInvocation.fnct.parts[0].name === "XMLHttpRequest" &&
 			fnctInvocation.fnct.parts[1].value === "open") {
 
-		//let output = fnctInvocation.fnct.toHumanValue();
-
-		//output += "(";
-		//output += fnctInvocation.arguments.map(function(arg) { return '"' + arg.toHumanValue() + '"'; }).join(",");
-		//output += ")";
-
-		//console.log("----");
-		//console.log("Detected XHR call !");
-		//console.log(output);
-		//console.log("----");
-
 		let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[1]], result);
 
 		for (let j=0; j<possibleValue.length; j++) {
 			console.log("Endpoint found : " + possibleValue[j]);
 		}
+	}
+
+	if (fnctInvocation.fnct.parts &&
+			fnctInvocation.fnct.parts[0].name === "UG$$" &&
+			fnctInvocation.fnct.parts[1].value === "get") {
+
+		let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
+
+		for (let j=0; j<possibleValue.length; j++) {
+			console.log("Endpoint found : " + possibleValue[j]);
+		}	
 	}
 }
