@@ -1,355 +1,23 @@
 var acorn = require("acorn");
-var _ = require("lodash");
 var fs = require("fs");
 
 /**
  * Classes to represent the stucture used in the utility.
  */
 
-/// class Reference
-
-function Reference(name) {
-	this.name = name;
-}
-
-Reference.prototype.toHumanValue = function () {
-	return "@{ref(" + this.name.split("$").pop() + ")}";
-}
-
-Reference.prototype.equals = function (val) {
-	if (val.constructor.name !== "Reference") {
-		return false;
-	}
-
-	return this.name === val.name;
-}
-
-/// class ObjectStructure
-
-function ObjectStructure(type = "G$Object") {
-	this.properties = new Map();
-	this.type = type;
-}
-
-ObjectStructure.prototype.toHumanValue = function () {
-	return "@{obj(" + this.type + ")}";
-}
-
-ObjectStructure.prototype.equals = function (val) {
-	if (val.constructor.name !== "ObjectStructure") {
-		return false;
-	}
-
-	if (val.properties.size() !== this.properties.size() || !val.type.equals(this.type)) {
-		return false;
-	}
-
-	var good = true;
-
-	this.properties.forEach(function (value, key, map) {
-		if (!val.properties.has(key)) {
-			good = false;
-			return;
-		}
-
-		if (!val.properties.get(key).equals(value)) {
-			good = false;
-			return;
-		}
-	});
-
-	return good;
-};
-
-/// class Constant
-
-function Constant(value) {
-	this.value = value;
-}
-
-Constant.prototype.toHumanValue = function () {
-	return this.value;
-}
-
-Constant.prototype.equals = function (val) {
-	if (val.constructor.name !== "Constant") {
-		return false;
-	}
-
-	return this.value === val.value;
-}
-
-/// class Concatenation
-
-function Concatenation(value1, value2) {
-	this.values = [];
-	this.values.push(value1);
-	this.values.push(value2);
-}
-
-Concatenation.prototype.toHumanValue = function () {
-	var result = "";
-	for (let i=0; i<this.values.length; i++) {
-		result += this.values[i].toHumanValue();
-	}
-	return result;
-}
-
-Concatenation.prototype.equals = function (val) {
-	if (val.constructor.name !== "Concatenation") {
-		return false;
-	}
-
-	return val.values[0].equals(this.values[0]) && val.values[1].equals(this.values[1]);
-}
-
-/// class LocalFunctionCall
-
-function LocalFunctionCall(reference, args) {
-	this.arguments = args;
-	this.reference = reference;
-}
-
-LocalFunctionCall.prototype.toHumanValue = function () {
-	var result = this.reference.toHumanValue() + "(";
-	for (let i=0; i<this.arguments.length; i++) {
-		result += this.arguments[i].toHumanValue() + ",";
-	}
-	result = result.substring(0, result.length - 1) + ")";
-	return result;
-}
-
-LocalFunctionCall.prototype.equals = function (val) {
-	if (val.constructor.name !== "LocalFunctionCall") {
-		return false;
-	}
-
-	if (!this.reference.equals(val.reference)) {
-		return false;
-	} 
-
-	if (this.arguments.length !== val.arguments.length) {
-		return false;
-	}
-
-	var good = true;
-
-	this.arguments.forEach(function (value, index) {
-		if (!value.equals(val.arguments[index])) {
-			good = false;
-		}
-	});
-
-	return good;
-}
-
-/// class GlobalFunctionCall
-
-function GlobalFunctionCall(name, args) {
-	this.name = name;
-	this.arguments = args;
-}
-
-GlobalFunctionCall.prototype.toHumanValue = function () {
-	var result = this.name + "(";
-	for (let i=0; i<this.arguments.length; i++) {
-		result += this.arguments[i].toHumanValue();
-		if (i !== this.arguments.length - 1) {
-			result += ",";
-		}
-	}
-	result += ")";
-	return result;
-}
-
-GlobalFunctionCall.prototype.equals = function (val) {
-	if (val.constructor.name !== "GlobalFunctionCall") {
-		return false;
-	}
-
-	if (this.name !== val.name) {
-		return false;
-	} 
-
-	if (this.arguments.length !== val.arguments.length) {
-		return false;
-	}
-
-	var good = true;
-
-	this.arguments.forEach(function (value, index) {
-		if (!value.equals(val.arguments[index])) {
-			good = false;
-		}
-	});
-
-	return good;
-}
-
-/// class ObjectFunctionCall
-
-function ObjectFunctionCall(members, args) {
-	this.members = new MemberExpression(members);
-	this.arguments = args;
-}
-
-ObjectFunctionCall.prototype.toHumanValue = function () {
-	//TODO
-};
-
-ObjectFunctionCall.prototype.equals = function (val) {
-	if (val.constructor.name !== "ObjectFunctionCall") {
-		return false;
-	}
-
-	if (!this.members.equals(val.members)) {
-		return false;
-	}
-
-	if (this.arguments.length !== val.arguments.length) {
-		return false;
-	}
-
-	var good = true;
-
-	this.arguments.forEach(function (value, index) {
-		if (!value.equals(val.arguments[index])) {
-			good = false;
-		}
-	});
-
-	return good;
-};
-
-/// class MemberExpression
-
-function MemberExpression(parts) {
-	this.parts = parts;
-}
-
-MemberExpression.prototype.toHumanValue = function () {
-	var result = "";
-	for (let i=0; i<this.parts.length; i++) {
-		result += this.parts[i].toHumanValue() + ".";
-	}
-	result = result.substring(0, result.length - 1);
-	return result;
-}
-
-MemberExpression.prototype.equals = function (val) {
-	if (val.constructor.name !== "MemberExpression") {
-		return false;
-	}
-
-	if (this.parts.length !== val.parts.length) {
-		return false;
-	}
-
-	var good = true;
-
-	this.parts.forEeach(function (value, key, map) {
-		if (!value.equals(val.parts[key])) {
-			good = false;
-		}
-	});
-
-	return good;
-}
-
-/// class Unknown
-
-function Unknown() {
-
-}
-
-Unknown.prototype.toHumanValue = function () {
-	return "@{UNKNOWN}";
-}
-
-Unknown.prototype.equals = function (val) {
-	if (val.constructor.name !== "Unknown") {
-		return false;
-	}
-
-	return true;
-}
-
-/// class FunctionInvocation
-
-function FunctionInvocation() {
-	this.fnct = null;
-	this.arguments = [];
-}
-
-FunctionInvocation.prototype.equals = function (val) {
-	if (val.constructor.name !== "Unknown") {
-		return false;
-	}
-
-	if (!this.fnct.equals(val.fnct)) {
-		return false;
-	}
-
-	if (this.arguments.length !== val.arguments.length) {
-		return false;
-	}
-
-	var good = true;
-
-	this.arguments.forEach(function (value, index) {
-		if (!value.equals(val.arguments[index])) {
-			good = false;
-		}
-	});
-
-	return good;
-}
-
-/// class FunctionArgument
-
-function FunctionArgument(fnct, variableName, position) {
-	this.name = variableName;
-	this.fnct = fnct;
-	this.position = position;
-}
-
-FunctionArgument.prototype.toHumanValue = function () {
-	return "@{arg" + this.position + "(" + this.name + ")}";
-}
-
-FunctionInvocation.prototype.equals = function (val) {
-	if (val.constructor.name !== "FunctionInvocation") {
-		return false;
-	}
-
-	if (this.name !== val.name) {
-		return false;
-	}
-
-	if (!this.fnct.equals(val.fnct)) {
-		return false;
-	}
-
-	if (this.position !== val.position) {
-		return false;
-	}
-
-	return true;
-}
-
-/// class AnalysusResult
-
-function AnalysisResult() {
-	this.assignations = new Map();
-	this.invocations = [];
-}
-
-/// class Context
-
-function Context(scope, result) {
-	this.scope = scope;
-	this.result = result;
-}
+var AnalysisResult     = require("./classes/analysis-result");
+var Concatenation      = require("./classes/concatenation");
+var Constant           = require("./classes/constant");
+var Context            = require("./classes/context");
+var FunctionArgument   = require("./classes/function-argument");
+var FunctionInvocation = require("./classes/function-invocation");
+var GlobalFunctionCall = require("./classes/global-function-call");
+var LocalFunctionCall  = require("./classes/local-function-call");
+var MemberExpression   = require("./classes/member-expression");
+var ObjectFunctionCall = require("./classes/object-function-call");
+var ObjectStructure    = require("./classes/object-structure");
+var Reference          = require("./classes/reference");
+var Unknown            = require("./classes/unknown");
 
 /**
  * Analysis function
@@ -378,7 +46,7 @@ function collectVar(tree, _collectVar, collectLet) {
 				variables.push(statement.declarations[j].id.name);
 			}
 		} else if (statement.body && statement.type !== "FunctionDeclaration" && _collectVar) {
-			variables = _.merge(variables, collectVar(statement, true, false));
+			variables = variables.concat(collectVar(statement, true, false));
 		} else if (statement.type === "FunctionDeclaration" && _collectVar) {
 			variables.push(statement.id.name);
 		}
@@ -403,7 +71,7 @@ function collectFunction(tree) {
 			if (statement.type === "FunctionDeclaration") {
 				functions.push(statement);
 			} else {
-				functions = _.merge(functions, collectFunction(statement));
+				functions = functions.concat(collectFunction(statement));
 			}
 		}
 	}
@@ -791,51 +459,46 @@ function postProcessingResolveArgument(arg, result) {
 		output.push(res);
 	}
 
-	
-	//console.log("-------");
-	//console.log(arg);
-	//console.log("Arguments : ", functionArgs);
-	//console.log(resolvedFunctionArgs);
-	//console.log(functionArgsPosition);
-	//console.log(output);
-	//console.log("-------");
-
 	return output;
 }
 
-// Main code to test the analysis function
-var code = fs.readFileSync("code.js");
-var tree = acorn.parse(code);
-var result = analysis(tree);
+function getEndpoints(code) {
+	// Main code to test the analysis function
+	var tree = acorn.parse(code);
+	var result = analysis(tree);
+	var endpoints = [];
 
-//console.log(JSON.stringify(tree));
-//console.log(result.invocations);
-//console.log(JSON.stringify(result.invocations));
-//console.log(result.assignations);
+	for (let i=0; i<result.invocations.length; i++) {
+		let fnctInvocation = result.invocations[i];
 
-for (let i=0; i<result.invocations.length; i++) {
-	let fnctInvocation = result.invocations[i];
+		// Print the information related to the XHR API only. 
+		if (fnctInvocation.fnct.parts && 
+				fnctInvocation.fnct.parts[0].name === "XMLHttpRequest" &&
+				fnctInvocation.fnct.parts[1].value === "open") {
 
-	// Print the information related to the XHR API only. 
-	if (fnctInvocation.fnct.parts && 
-			fnctInvocation.fnct.parts[0].name === "XMLHttpRequest" &&
-			fnctInvocation.fnct.parts[1].value === "open") {
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[1]], result);
 
-		//let output = fnctInvocation.fnct.toHumanValue();
+			for (let j=0; j<possibleValue.length; j++) {
+				endpoints.push(possibleValue[j][0]);
+			}
+		}
 
-		//output += "(";
-		//output += fnctInvocation.arguments.map(function(arg) { return '"' + arg.toHumanValue() + '"'; }).join(",");
-		//output += ")";
+		if (fnctInvocation.fnct.parts &&
+				fnctInvocation.fnct.parts[0].name === "UG$$" &&
+				fnctInvocation.fnct.parts[1].value === "get") {
 
-		//console.log("----");
-		//console.log("Detected XHR call !");
-		//console.log(output);
-		//console.log("----");
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
 
-		let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[1]], result);
-
-		for (let j=0; j<possibleValue.length; j++) {
-			console.log("Endpoint found : " + possibleValue[j]);
+			for (let j=0; j<possibleValue.length; j++) {
+				endpoints.push(possibleValue[j][0]);
+			}	
 		}
 	}
+
+	return endpoints;
 }
+
+module.exports = {
+	getEndpoints : getEndpoints
+}
+

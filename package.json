@@ -9,7 +9,6 @@
   "author": "Olivier Arteau",
   "license": "MIT",
   "dependencies": {
-    "acorn": "^5.7.3",
-    "lodash": "^4.17.11"
+    "acorn": "^5.7.3"
   }
 }
