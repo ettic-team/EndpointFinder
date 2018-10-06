@@ -146,6 +146,14 @@ function Context(scope, result) {
  * Analysis function
  */
 
+/**
+ * Returns the list of all the variable declaration in the scope of the 
+ * "tree" object.
+ *
+ * @param tree       - AST object
+ * @param collectVar - If we collect variable declared with "var".
+ * @param collectLet - If we collect variable declared with "let".
+ */
 function collectVar(tree, _collectVar, collectLet) {
 	var variables = [];
 
@@ -170,6 +178,12 @@ function collectVar(tree, _collectVar, collectLet) {
 	return variables;
 }
 
+/**
+ * Returns the list of all the function declaration inside the "tree"
+ * object. This search stops at one level of function.
+ *
+ * @param tree - AST object
+ */
 function collectFunction(tree) {
 	var functions = [];
 
@@ -188,6 +202,13 @@ function collectFunction(tree) {
 	return functions;
 }
 
+/**
+ * Returns the component of a member expression as a flatten array.
+ * It also resolves the symbolic value of the component.
+ *
+ * @param memberExpression - AST of type "MemberExpression"
+ * @param context          - Context object
+ */
 function flattenMemberExpression(memberExpression, context) {
 	var result;
 	var property = (memberExpression.computed) ? 
@@ -204,6 +225,12 @@ function flattenMemberExpression(memberExpression, context) {
 	return result;
 }
 
+/**
+ * Returns the resolved symbolic value of the "variableName".
+ *
+ * @param variableName - Name of the variable.
+ * @param context      - Context object.
+ */
 function resolveReference(variableName, context) {
 	let referenceIdentifier = context.scope.get(variableName);
 
@@ -217,6 +244,13 @@ function resolveReference(variableName, context) {
 	}
 }
 
+/**
+ * Returns the symbolic value of the AST object "tree".
+ *
+ * @param tree              - AST object
+ * @param context           - Context object
+ * @param resolveIdentifier - Whether or not identifier value should be ressolved. 
+ */
 function toSymbolic(tree, context, resolveIdentfier = true) {
 	switch (tree.type) {
 		case "Literal":
@@ -279,12 +313,20 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 	return new Unknown();
 }
 
+/**
+ * Merge the content of two AnalysisResult.
+ */
 function mergeResult(result1, result2) {
 	result2.assignations.forEach(function (value, key, map) {
 		result1.assignations.set(key, value);
 	});
 }
 
+/**
+ * Perform the main analysis to retrieve :
+ *  - The list of all the function call.
+ *  - The list of all the variable and their symbolic value.
+ */
 function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeName = "G$", partialScope = false) {
 	if (!tree.body) {
 		return new Map();
@@ -374,44 +416,107 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 	return result;
 }
 
-function postProcessingResolveArgument(arg, result) {
+/**
+ * Returns the list of all "FunctionArgument" used in the symbolic value of "args."
+ */
+function postProcessingGatherArgument(args) {
 	var output = [];
 
-	switch (arg.constructor.name) {
-		case "Constant":
-			output.push(arg.value);
-			break;
+	for (let i=0; i<args.length; i++) {
+		let arg = args[i];
 
-		case "Concatenation":
-			let leftSide = postProcessingResolveArgument(arg.values[0], result);
-			let rightSide = postProcessingResolveArgument(arg.values[1], result);
+		switch (arg.constructor.name) {
+			case "Concatenation":
+				output = output.concat(postProcessingGatherArgument([arg.values[0]]));
+				output = output.concat(postProcessingGatherArgument([arg.values[1]]));
+				break;
 
-			for (let i=0; i<leftSide.length; i++) {
-				for (let j=0; j<rightSide.length; j++) {
-					output.push(leftSide[i] + rightSide[j]);
-				}
-			}
-
-			break;
-
-		case "FunctionArgument":
-			for (let i=0; i<result.invocations.length; i++) {
-				let invocation = result.invocations[i];
-
-				if (invocation.fnct.constructor.name === "Reference" && invocation.fnct.name === arg.fnct) {
-					output.push(postProcessingResolveArgument(invocation.arguments[arg.position], result));
-				}
-
-			}
-			break;
-
-		default:
-			output.push("@{VAR}");
+			case "FunctionArgument":
+				output.push(arg);
+				break;
+		}
 	}
 
 	return output;
 }
 
+/**
+ * Returns the value of an "arg" given the resolved value of the function argument.
+ */
+function postProcessingResolveArgumentWithValue(arg, result, functionArgsPosition, resolvedFunctionArgs) {
+	var output = [];
+
+	switch (arg.constructor.name) {
+		case "Constant":
+			return arg.value;
+
+		case "Concatenation":
+			let leftSide = postProcessingResolveArgumentWithValue(arg.values[0], result, functionArgsPosition, resolvedFunctionArgs);
+			let rightSide = postProcessingResolveArgumentWithValue(arg.values[1], result, functionArgsPosition, resolvedFunctionArgs);
+			return leftSide + rightSide;
+
+		case "FunctionArgument":
+			let positionArg = functionArgsPosition.indexOf(arg.position);
+			return resolvedFunctionArgs[positionArg];
+	}
+
+	return "@{VAR}";
+}
+
+/**
+ * Returns the list of all possible value an "arg" value can hold.
+ */
+function postProcessingResolveArgument(arg, result) {
+	var functionArgs = postProcessingGatherArgument(arg);
+	var functionArgsPosition = [];
+	var resolvedFunctionArgs = [];
+	var output = [];
+
+	if (functionArgs.length > 0) {
+		for (let i=0; i<result.invocations.length; i++) {
+			let invocation = result.invocations[i];
+
+			if (invocation.fnct.constructor.name === "Reference" && invocation.fnct.name === functionArgs[0].fnct) {
+				let toResolve = functionArgs.map(function (arg) { return invocation.arguments[arg.position]; });
+				let res = postProcessingResolveArgument(toResolve, result);
+				
+				functionArgsPosition = functionArgs.map(function (arg) { return arg.position; });
+				resolvedFunctionArgs = resolvedFunctionArgs.concat(res);
+			}
+		}
+
+		for (let i=0; i<resolvedFunctionArgs.length; i++) {
+			let res = [];
+
+			for (let j=0; j<arg.length; j++) {
+				res.push(postProcessingResolveArgumentWithValue(arg[j], result, functionArgsPosition, resolvedFunctionArgs[i]))
+			}
+
+			output.push(res);
+		}
+	} else {
+		let res = [];
+
+		for (let j=0; j<arg.length; j++) {
+			res.push(postProcessingResolveArgumentWithValue(arg[j], result, [], []));
+		}
+
+		output.push(res);
+	}
+
+	
+	//console.log("-------");
+	//console.log(arg);
+	//console.log("Arguments : ", functionArgs);
+	//console.log(resolvedFunctionArgs);
+	//console.log(functionArgsPosition);
+	//console.log(output);
+	//console.log("-------");
+
+	return output;
+}
+
+// Main code to test the analysis function
 var code = fs.readFileSync("code.js");
 var tree = acorn.parse(code);
 var result = analysis(tree);
@@ -423,12 +528,12 @@ var result = analysis(tree);
 for (let i=0; i<result.invocations.length; i++) {
 	let fnctInvocation = result.invocations[i];
 
-
+	// Print the information related to the XHR API only. 
 	if (fnctInvocation.fnct.parts && 
 			fnctInvocation.fnct.parts[0].name === "XMLHttpRequest" &&
 			fnctInvocation.fnct.parts[1].value === "open") {
 
-		//let output = fnctInvocation.fnct.toHumanValue();
+		let output = fnctInvocation.fnct.toHumanValue();
 
 		//output += "(";
 		//output += fnctInvocation.arguments.map(function(arg) { return '"' + arg.toHumanValue() + '"'; }).join(",");
@@ -439,7 +544,7 @@ for (let i=0; i<result.invocations.length; i++) {
 		//console.log(output);
 		//console.log("----");
 
-		let possibleValue = postProcessingResolveArgument(fnctInvocation.arguments[1], result);
+		let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[1]], result);
 
 		for (let j=0; j<possibleValue.length; j++) {
 			console.log("Endpoint found : " + possibleValue[j]);
