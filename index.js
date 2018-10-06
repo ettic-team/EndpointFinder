@@ -16,6 +16,14 @@ Reference.prototype.toHumanValue = function () {
 	return "@{ref(" + this.name.split("$").pop() + ")}";
 }
 
+Reference.prototype.equals = function (val) {
+	if (val.constructor.name !== "Reference") {
+		return false;
+	}
+
+	return this.name === val.name;
+}
+
 /// class ObjectStructure
 
 function ObjectStructure(type = "G$Object") {
@@ -27,6 +35,32 @@ ObjectStructure.prototype.toHumanValue = function () {
 	return "@{obj(" + this.type + ")}";
 }
 
+ObjectStructure.prototype.equals = function (val) {
+	if (val.constructor.name !== "ObjectStructure") {
+		return false;
+	}
+
+	if (val.properties.size() !== this.properties.size() || !val.type.equals(this.type)) {
+		return false;
+	}
+
+	var good = true;
+
+	this.properties.forEach(function (value, key, map) {
+		if (!val.properties.has(key)) {
+			good = false;
+			return;
+		}
+
+		if (!val.properties.get(key).equals(value)) {
+			good = false;
+			return;
+		}
+	});
+
+	return good;
+};
+
 /// class Constant
 
 function Constant(value) {
@@ -35,6 +69,14 @@ function Constant(value) {
 
 Constant.prototype.toHumanValue = function () {
 	return this.value;
+}
+
+Constant.prototype.equals = function (val) {
+	if (val.constructor.name !== "Constant") {
+		return false;
+	}
+
+	return this.value === val.value;
 }
 
 /// class Concatenation
@@ -53,6 +95,14 @@ Concatenation.prototype.toHumanValue = function () {
 	return result;
 }
 
+Concatenation.prototype.equals = function (val) {
+	if (val.constructor.name !== "Concatenation") {
+		return false;
+	}
+
+	return val.values[0].equals(this.values[0]) && val.values[1].equals(this.values[1]);
+}
+
 /// class LocalFunctionCall
 
 function LocalFunctionCall(reference, args) {
@@ -67,6 +117,30 @@ LocalFunctionCall.prototype.toHumanValue = function () {
 	}
 	result = result.substring(0, result.length - 1) + ")";
 	return result;
+}
+
+LocalFunctionCall.prototype.equals = function (val) {
+	if (val.constructor.name !== "LocalFunctionCall") {
+		return false;
+	}
+
+	if (!this.reference.equals(val.reference)) {
+		return false;
+	} 
+
+	if (this.arguments.length !== val.arguments.length) {
+		return false;
+	}
+
+	var good = true;
+
+	this.arguments.forEach(function (value, index) {
+		if (!value.equals(val.arguments[index])) {
+			good = false;
+		}
+	});
+
+	return good;
 }
 
 /// class GlobalFunctionCall
@@ -88,12 +162,64 @@ GlobalFunctionCall.prototype.toHumanValue = function () {
 	return result;
 }
 
+GlobalFunctionCall.prototype.equals = function (val) {
+	if (val.constructor.name !== "GlobalFunctionCall") {
+		return false;
+	}
+
+	if (this.name !== val.name) {
+		return false;
+	} 
+
+	if (this.arguments.length !== val.arguments.length) {
+		return false;
+	}
+
+	var good = true;
+
+	this.arguments.forEach(function (value, index) {
+		if (!value.equals(val.arguments[index])) {
+			good = false;
+		}
+	});
+
+	return good;
+}
+
 /// class ObjectFunctionCall
 
 function ObjectFunctionCall(members, args) {
-	this.members = members;
+	this.members = new MemberExpression(members);
 	this.arguments = args;
 }
+
+ObjectFunctionCall.prototype.toHumanValue = function () {
+	//TODO
+};
+
+ObjectFunctionCall.prototype.equals = function (val) {
+	if (val.constructor.name !== "ObjectFunctionCall") {
+		return false;
+	}
+
+	if (!this.members.equals(val.members)) {
+		return false;
+	}
+
+	if (this.arguments.length !== val.arguments.length) {
+		return false;
+	}
+
+	var good = true;
+
+	this.arguments.forEach(function (value, index) {
+		if (!value.equals(val.arguments[index])) {
+			good = false;
+		}
+	});
+
+	return good;
+};
 
 /// class MemberExpression
 
@@ -110,6 +236,26 @@ MemberExpression.prototype.toHumanValue = function () {
 	return result;
 }
 
+MemberExpression.prototype.equals = function (val) {
+	if (val.constructor.name !== "MemberExpression") {
+		return false;
+	}
+
+	if (this.parts.length !== val.parts.length) {
+		return false;
+	}
+
+	var good = true;
+
+	this.parts.forEeach(function (value, key, map) {
+		if (!value.equals(val.parts[key])) {
+			good = false;
+		}
+	});
+
+	return good;
+}
+
 /// class Unknown
 
 function Unknown() {
@@ -120,11 +266,43 @@ Unknown.prototype.toHumanValue = function () {
 	return "@{UNKNOWN}";
 }
 
+Unknown.prototype.equals = function (val) {
+	if (val.constructor.name !== "Unknown") {
+		return false;
+	}
+
+	return true;
+}
+
 /// class FunctionInvocation
 
 function FunctionInvocation() {
 	this.fnct = null;
 	this.arguments = [];
+}
+
+FunctionInvocation.prototype.equals = function (val) {
+	if (val.constructor.name !== "Unknown") {
+		return false;
+	}
+
+	if (!this.fnct.equals(val.fnct)) {
+		return false;
+	}
+
+	if (this.arguments.length !== val.arguments.length) {
+		return false;
+	}
+
+	var good = true;
+
+	this.arguments.forEach(function (value, index) {
+		if (!value.equals(val.arguments[index])) {
+			good = false;
+		}
+	});
+
+	return good;
 }
 
 /// class FunctionArgument
@@ -137,6 +315,26 @@ function FunctionArgument(fnct, variableName, position) {
 
 FunctionArgument.prototype.toHumanValue = function () {
 	return "@{arg" + this.position + "(" + this.name + ")}";
+}
+
+FunctionInvocation.prototype.equals = function (val) {
+	if (val.constructor.name !== "FunctionInvocation") {
+		return false;
+	}
+
+	if (this.name !== val.name) {
+		return false;
+	}
+
+	if (!this.fnct.equals(val.fnct)) {
+		return false;
+	}
+
+	if (this.position !== val.position) {
+		return false;
+	}
+
+	return true;
 }
 
 /// class AnalysusResult
@@ -362,6 +560,44 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 }
 
 /**
+ * Perform a symbolic assignation on a MemberExpression.
+ * 
+ * @param left         - MemberExpression
+ * @param right        - Value to set
+ * @param assignations - Map of existing assignations 
+ */
+function memberExpressionAssignment(left, right, assignations) {
+	let mainObj = left.parts[0];
+	let prop    = left.parts[1];
+
+	if (mainObj instanceof ObjectStructure && prop instanceof Constant) {
+		// For deep structure we need to do the a recursive assignation.
+		if (mainObj.properties.has(prop.value) && left.parts.length > 2) {
+			let subsetMemberExpression = [mainObj.properties.get(prop.value)].concat(left.parts.slice(2));
+			memberExpressionAssignment(subsetMemberExpression, right, assignations);
+		} else {
+			mainObj.properties.set(prop.value, right);
+		}
+	} else {
+		let found = false;
+
+		assignations.forEach(function (value, key, map) {
+			if (found) return;
+
+			if (key instanceof MemberExpression && key.equals(left)) {
+				assignations.delete(key);
+				assignations.set(left, right);
+				found = true;
+			}
+		});
+
+		if (!found) {
+			assignations.set(left, right);
+		}
+	}
+}
+
+/**
  * Merge the content of two AnalysisResult.
  */
 function mergeResult(result1, result2) {
@@ -422,11 +658,14 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 				switch(element.expression.type) {
 					case "AssignmentExpression":
 						let symbolicLeft = toSymbolic(element.expression.left, context, false);
+						let symbolicRight = toSymbolic(element.expression.right, context);
 
 						if (symbolicLeft instanceof Reference) {
-							result.assignations.set(symbolicLeft.name, toSymbolic(element.expression.right, context));
+							result.assignations.set(symbolicLeft.name, symbolicRight, context);
+						} else if (symbolicLeft instanceof MemberExpression) {
+							memberExpressionAssignment(symbolicLeft, symbolicRight, result.assignations);
 						} else {
-							result.assignations.set(symbolicLeft, toSymbolic(element.expression.right, context));
+							result.assignations.set(symbolicLeft, symbolicRight);
 						}
 						break;
 

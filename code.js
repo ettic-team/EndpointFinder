@@ -1,9 +1,11 @@
 var a = "/123";
 var b = a + "123";
-var abcd = { "vvvv" : "/test" }
+var abcd = { "vvvv" : "/test" };
+abcd.ffff = "bob";
+var c = abcd;
 
 var xhr = new XMLHttpRequest();
-xhr.open("GET", b + "/" + abcd.vvvv, true);
+xhr.open("GET", b + "/" + c.ffff, true);
 xhr.send(null);
 
 function doXHR(url, a) {
