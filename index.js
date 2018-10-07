@@ -496,7 +496,14 @@ function getEndpoints(code) {
 			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
 
 			for (let j=0; j<possibleValue.length; j++) {
-				endpoints.push(possibleValue[j][0]);
+				// $.get("/path", { ... settings ... })
+				if (typeof possibleValue[j][0] === "string") {
+					endpoints.push(possibleValue[j][0]);
+
+				// $.get({ url : "/path", ... settings ... })
+				} else {
+					endpoints.push(possibleValue[j][0].url);
+				}
 			}	
 		}
 
@@ -508,7 +515,14 @@ function getEndpoints(code) {
 			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
 
 			for (let j=0; j<possibleValue.length; j++) {
-				endpoints.push(possibleValue[j][0]);
+				// $.post("/path", { ... settings ... })
+				if (typeof possibleValue[j][0] === "string") {
+					endpoints.push(possibleValue[j][0]);
+
+				// $.post({ url : "/path", ... settings ... })
+				} else {
+					endpoints.push(possibleValue[j][0].url);
+				}
 			}	
 		}
 
