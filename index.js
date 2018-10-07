@@ -399,11 +399,16 @@ function postProcessingGatherArgument(args) {
  * Returns the value of an "arg" given the resolved value of the function argument.
  */
 function postProcessingResolveArgumentWithValue(arg, result, functionArgsPosition, resolvedFunctionArgs) {
-	var output = [];
-
 	switch (arg.constructor.name) {
 		case "Constant":
 			return arg.value;
+
+		case "ObjectStructure":
+			let obj = {};
+			arg.properties.forEach(function (value, key, map) {
+				obj[key] = postProcessingResolveArgumentWithValue(value, result, functionArgsPosition, resolvedFunctionArgs);
+			});
+			return obj;
 
 		case "Concatenation":
 			let leftSide = postProcessingResolveArgumentWithValue(arg.values[0], result, functionArgsPosition, resolvedFunctionArgs);
@@ -471,7 +476,7 @@ function getEndpoints(code) {
 	for (let i=0; i<result.invocations.length; i++) {
 		let fnctInvocation = result.invocations[i];
 
-		// Print the information related to the XHR API only. 
+		// XHR Native API 
 		if (fnctInvocation.fnct.parts && 
 				fnctInvocation.fnct.parts[0].name === "XMLHttpRequest" &&
 				fnctInvocation.fnct.parts[1].value === "open") {
@@ -483,14 +488,61 @@ function getEndpoints(code) {
 			}
 		}
 
+		// jQuery API : $_.get
 		if (fnctInvocation.fnct.parts &&
-				fnctInvocation.fnct.parts[0].name === "UG$$" &&
+				fnctInvocation.fnct.parts[0].name.endsWith("$$") &&
 				fnctInvocation.fnct.parts[1].value === "get") {
 
 			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
 
 			for (let j=0; j<possibleValue.length; j++) {
-				endpoints.push(possibleValue[j][0]);
+				// $.get("/path", { ... settings ... })
+				if (typeof possibleValue[j][0] === "string") {
+					endpoints.push(possibleValue[j][0]);
+
+				// $.get({ url : "/path", ... settings ... })
+				} else {
+					endpoints.push(possibleValue[j][0].url);
+				}
+			}	
+		}
+
+		// jQuery API : $_.post
+		if (fnctInvocation.fnct.parts &&
+				fnctInvocation.fnct.parts[0].name.endsWith("$$") &&
+				fnctInvocation.fnct.parts[1].value === "post") {
+
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
+
+			for (let j=0; j<possibleValue.length; j++) {
+				// $.post("/path", { ... settings ... })
+				if (typeof possibleValue[j][0] === "string") {
+					endpoints.push(possibleValue[j][0]);
+
+				// $.post({ url : "/path", ... settings ... })
+				} else {
+					endpoints.push(possibleValue[j][0].url);
+				}
+			}	
+		}
+
+		// jQuery API : $_.ajax
+		if (fnctInvocation.fnct.parts &&
+				fnctInvocation.fnct.parts[0].name.endsWith("$$") &&
+				fnctInvocation.fnct.parts[1].value === "ajax") {
+
+
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
+
+			for (let j=0; j<possibleValue.length; j++) {
+				// $.ajax("/path", { ... settings ... })
+				if (typeof possibleValue[j][0] === "string") {
+					endpoints.push(possibleValue[j][0]);
+
+				// $.ajax({ url : "/path", ... settings ... })
+				} else {
+					endpoints.push(possibleValue[j][0].url);
+				}
 			}	
 		}
 	}
