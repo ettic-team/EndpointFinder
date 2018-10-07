@@ -23,8 +23,8 @@ MemberExpression.prototype.equals = function (val) {
 	}
 
 	var good = true;
-
-	this.parts.forEeach(function (value, key, map) {
+	
+	this.parts.forEach(function (value, key, map) {
 		if (!value.equals(val.parts[key])) {
 			good = false;
 		}
