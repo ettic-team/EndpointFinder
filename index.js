@@ -2,6 +2,12 @@ var acorn = require("acorn");
 var fs = require("fs");
 
 /**
+ * Constant
+ */
+
+var CONST_SEPARATOR_ID = "&&&";
+
+/**
  * Classes to represent the stucture used in the utility.
  */
 
@@ -64,15 +70,30 @@ function collectVar(tree, _collectVar, collectLet) {
 function collectFunction(tree) {
 	var functions = [];
 
-	for (let i=0; i<tree.body.length; i++) {
-		let statement = tree.body[i];
+	function handleProperty(tree) {
+		if (!tree) return;
 
-		if (statement.body) {
-			if (statement.type === "FunctionDeclaration") {
-				functions.push(statement);
-			} else {
-				functions = functions.concat(collectFunction(statement));
+		if (typeof tree === "object") {
+			if (tree.body) {
+				if (tree.type === "FunctionDeclaration" || tree.type === "FunctionExpression") {
+					functions.push(tree);
+					return;
+				}
 			}
+
+			functions = functions.concat(collectFunction(tree));
+		}
+	}
+
+	for (let prop in tree) {
+		if (!tree.hasOwnProperty(prop)) continue;
+
+		if (Array.isArray(tree[prop])) {
+			for (let j=0; j<tree[prop].length; j++) {
+				handleProperty(tree[prop][j]);
+			}
+		} else {
+			handleProperty(tree[prop]);
 		}
 	}
 
@@ -115,7 +136,7 @@ function resolveReference(variableName, context) {
 		return context.result.assignations.get(referenceIdentifier);
 	} else {
 		if (typeof referenceIdentifier === "undefined") {
-			referenceIdentifier = "UG$" + variableName;
+			referenceIdentifier = "UG" + CONST_SEPARATOR_ID + variableName;
 		}
 		return new Reference(referenceIdentifier);
 	}
@@ -162,8 +183,12 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 				let result = resolveReference(tree.name, context);
 				return result;
 			} else {
-				let referenceIdentifier = context.scope.get(tree.name);
-				return new Reference(referenceIdentifier);
+				if (context.scope.has(tree.name)) {
+					let referenceIdentifier = context.scope.get(tree.name);
+					return new Reference(referenceIdentifier);
+				} else {
+					return new Reference(tree.name);
+				}
 			}
 
 		case "BinaryExpression":
@@ -207,7 +232,12 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 			let obj = new ObjectStructure();
 			for (let i=0; i<tree.properties.length; i++) {
 				let property = tree.properties[i];
-				obj.properties.set(property.key.value, toSymbolic(property.value, context));
+
+				if (property.key.type === "Constant") {
+					obj.properties.set(property.key.value, toSymbolic(property.value, context));
+				} else {
+					obj.properties.set(property.key.name, toSymbolic(property.value, context));
+				}
 			}
 			return obj;
 
@@ -270,7 +300,7 @@ function memberExpressionAssignment(left, right, assignations) {
  */
 function mergeResult(result1, result2) {
 	result2.assignations.forEach(function (value, key, map) {
-		result1.assignations.set(key, value);
+		result1.assignations.set(key, value); 
 	});
 }
 
@@ -279,7 +309,7 @@ function mergeResult(result1, result2) {
  *  - The list of all the function call.
  *  - The list of all the variable and their symbolic value.
  */
-function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeName = "G$", partialScope = false) {
+function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeName = "G" + CONST_SEPARATOR_ID, partialScope = false) {
 	if (!tree.body) {
 		return new Map();
 	}
@@ -296,13 +326,17 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 		newScope.set(variableName, scopeName + variableName);
 	}
 
-	if (tree.type === "FunctionDeclaration") {
+	if (tree.type === "FunctionDeclaration" || tree.type === "FunctionExpression") {
 		for (let i = 0; i < tree.params.length; i++) {
 			let arg = tree.params[i];
 
 			if (arg.type === "Identifier") {
 				newScope.set(arg.name, scopeName + arg.name);
-				result.assignations.set(scopeName + arg.name, new FunctionArgument(scope.get(tree.id.name) , arg.name, i));
+				let fnctReference = "???"; //anonymous function, need to deal with it
+				if (tree.id && tree.id.name) {
+					fnctReference = scope.get(tree.id.name);
+				}
+				result.assignations.set(scopeName + arg.name, new FunctionArgument(fnctReference, arg.name, i));
 			}
 		}
 	}
@@ -329,7 +363,7 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 						let symbolicRight = toSymbolic(element.expression.right, context);
 
 						if (symbolicLeft instanceof Reference) {
-							result.assignations.set(symbolicLeft.name, symbolicRight, context);
+							result.assignations.set(symbolicLeft.name, symbolicRight);
 						} else if (symbolicLeft instanceof MemberExpression) {
 							memberExpressionAssignment(symbolicLeft, symbolicRight, result.assignations);
 						} else {
@@ -345,11 +379,12 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 				break;
 
 			case "FunctionDeclaration":
+			case "FunctionExpression":
 				break;
 
 			default:
 				if (element.body) {
-					let resultFunction = analysis(element, result, newScope, scopeName + "LS" + i + "$", true);
+					let resultFunction = analysis(element, result, newScope, scopeName + "LS" + i + CONST_SEPARATOR_ID, true);
 					mergeResult(result, resultFunction);
 				}
 				break;
@@ -361,7 +396,7 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 
 		for (let i=0; i<functions.length; i++) {
 			let element = functions[i];
-			let resultFunction = analysis(element, result, newScope, scopeName + "FS" + i + "$", false);
+			let resultFunction = analysis(element, result, newScope, scopeName + "FS" + i + CONST_SEPARATOR_ID, false);
 
 			mergeResult(result, resultFunction);
 		}
@@ -475,7 +510,7 @@ function getEndpoints(code) {
 
 	for (let i=0; i<result.invocations.length; i++) {
 		let fnctInvocation = result.invocations[i];
-
+		
 		// XHR Native API 
 		if (fnctInvocation.fnct.parts && 
 				fnctInvocation.fnct.parts[0].name === "XMLHttpRequest" &&
@@ -490,7 +525,7 @@ function getEndpoints(code) {
 
 		// jQuery API : $_.get
 		if (fnctInvocation.fnct.parts &&
-				fnctInvocation.fnct.parts[0].name.endsWith("$$") &&
+				(fnctInvocation.fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnctInvocation.fnct.parts[1].value === "get") {
 
 			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
@@ -509,7 +544,7 @@ function getEndpoints(code) {
 
 		// jQuery API : $_.post
 		if (fnctInvocation.fnct.parts &&
-				fnctInvocation.fnct.parts[0].name.endsWith("$$") &&
+				(fnctInvocation.fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnctInvocation.fnct.parts[1].value === "post") {
 
 			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
@@ -528,9 +563,8 @@ function getEndpoints(code) {
 
 		// jQuery API : $_.ajax
 		if (fnctInvocation.fnct.parts &&
-				fnctInvocation.fnct.parts[0].name.endsWith("$$") &&
+				(fnctInvocation.fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnctInvocation.fnct.parts[1].value === "ajax") {
-
 
 			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
 
