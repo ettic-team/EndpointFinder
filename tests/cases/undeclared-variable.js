@@ -1,3 +1,5 @@
+a = "/test"
+
 var xhr = new XMLHttpRequest();
-xhr.open("GET", "/my-api", true);
+xhr.open("GET", a, false);
 xhr.send(null);

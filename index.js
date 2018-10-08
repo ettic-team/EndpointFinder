@@ -136,7 +136,7 @@ function resolveReference(variableName, context) {
 		return context.result.assignations.get(referenceIdentifier);
 	} else {
 		if (typeof referenceIdentifier === "undefined") {
-			referenceIdentifier = "UG" + CONST_SEPARATOR_ID + variableName;
+			referenceIdentifier = "G" + CONST_SEPARATOR_ID + variableName;
 		}
 		return new Reference(referenceIdentifier);
 	}
@@ -187,7 +187,9 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 					let referenceIdentifier = context.scope.get(tree.name);
 					return new Reference(referenceIdentifier);
 				} else {
-					return new Reference(tree.name);
+					let tmpReference = new Reference("G" + CONST_SEPARATOR_ID + tree.name);
+					context.scope.set(tree.name, tmpReference.name);
+					return tmpReference;
 				}
 			}
 
@@ -233,7 +235,7 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 			for (let i=0; i<tree.properties.length; i++) {
 				let property = tree.properties[i];
 
-				if (property.key.type === "Constant") {
+				if (property.key.type === "Constant" || property.key.type === "Literal") {
 					obj.properties.set(property.key.value, toSymbolic(property.value, context));
 				} else {
 					obj.properties.set(property.key.name, toSymbolic(property.value, context));
@@ -341,7 +343,7 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 		}
 	}
 
-	var context = new Context(newScope, result);
+	var context = new Context(newScope, result, scopeName);
 
 	for (let i=0; i<tree.body.length; i++) {
 		let element = tree.body[i];
@@ -510,7 +512,7 @@ function getEndpoints(code) {
 
 	for (let i=0; i<result.invocations.length; i++) {
 		let fnctInvocation = result.invocations[i];
-		
+
 		// XHR Native API 
 		if (fnctInvocation.fnct.parts && 
 				fnctInvocation.fnct.parts[0].name === "XMLHttpRequest" &&
