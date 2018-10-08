@@ -4,11 +4,14 @@
   "description": "Finds endpoint from JavaScript content.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "./node_modules/.bin/jasmine --config=tests/spec/support/jasmine.json tests/spec/all-spec.js"
   },
   "author": "Olivier Arteau",
   "license": "MIT",
   "dependencies": {
     "acorn": "^5.7.3"
+  },
+  "devDependencies": {
+    "jasmine": "^3.2.0"
   }
 }
