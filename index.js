@@ -504,6 +504,12 @@ function postProcessingResolveArgument(arg, result) {
 	return output;
 }
 
+/**
+ * Main function of the project. This results an array of endpoint that are invoked
+ * by the JavaScript code that supplied as the first argument.
+ * 
+ * @param code - String value of the JavaScript
+ */
 function getEndpoints(code) {
 	// Main code to test the analysis function
 	var tree = acorn.parse(code);
@@ -589,4 +595,3 @@ function getEndpoints(code) {
 module.exports = {
 	getEndpoints : getEndpoints
 }
-
