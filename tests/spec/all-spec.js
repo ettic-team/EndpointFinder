@@ -56,6 +56,13 @@ describe("Basic", function () {
 		var missing = checkMissing(found, expected);
 		expect(missing).toEqual([]);
 	});
+
+	it("should support dynamic property", function () {
+		var expected = ["/test1"];
+		var found = runCaseFile("dynamic-property");
+		var missing = checkMissing(found, expected);
+		expect(missing).toEqual([]);
+	});
 });
 
 
