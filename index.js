@@ -252,6 +252,7 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 				invocation.arguments.push(toSymbolic(tree.arguments[j], context));
 			}
 
+			context.result.invocations.push(invocation);
 			return invocation;
 			
 	}
@@ -375,7 +376,6 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 
 					case "CallExpression":
 						let invocation = toSymbolic(element.expression, context);
-						result.invocations.push(invocation);
 						break;
 				}
 				break;
@@ -531,7 +531,7 @@ function getEndpoints(code) {
 			}
 		}
 
-		// jQuery API : $_.get
+		// jQuery API : $.get
 		if (fnctInvocation.fnct.parts &&
 				(fnctInvocation.fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnctInvocation.fnct.parts[1].value === "get") {
@@ -550,7 +550,7 @@ function getEndpoints(code) {
 			}	
 		}
 
-		// jQuery API : $_.post
+		// jQuery API : $.post
 		if (fnctInvocation.fnct.parts &&
 				(fnctInvocation.fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnctInvocation.fnct.parts[1].value === "post") {
@@ -569,7 +569,7 @@ function getEndpoints(code) {
 			}	
 		}
 
-		// jQuery API : $_.ajax
+		// jQuery API : $.ajax
 		if (fnctInvocation.fnct.parts &&
 				(fnctInvocation.fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnctInvocation.fnct.parts[1].value === "ajax") {
