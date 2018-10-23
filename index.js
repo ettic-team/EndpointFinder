@@ -312,21 +312,46 @@ function mergeResult(result1, result2) {
  *  - The list of all the function call.
  *  - The list of all the variable and their symbolic value.
  */
-function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeName = "G" + CONST_SEPARATOR_ID, partialScope = false) {
-	if (!tree.body) {
-		return new Map();
-	}
-
+function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeName = "G" + CONST_SEPARATOR_ID, partialScope = false, useNewScope = true) {
 	if (tree.body && !Array.isArray(tree.body)) {
 		tree.body = [tree.body];
 	}
 
-	var newScope = new Map(scope);
-	var listVar  = collectVar(tree, !partialScope, true);
+	if (tree.left || tree.right) {
+		tree.body = [];
+		tree.left  && tree.body.push(tree.left);
+		tree.right && tree.body.push(tree.right);
+	}
 
-	for (let i=0; i<listVar.length; i++) {
-		let variableName = listVar[i];
-		newScope.set(variableName, scopeName + variableName);
+	switch (tree.type) {
+		case "ExpressionStatement":
+			tree = { body : [tree] };
+			break;
+
+		case "SequenceExpression":
+			tree.body = tree.expressions;
+			break;
+
+		case "CallExpression":
+		case "AssignmentExpression":
+			tree = { body : [tree] };
+			break;
+	}
+
+	if (!tree.body) {
+		return new Map();
+	}
+
+	if (useNewScope) {
+		var newScope = new Map(scope);
+		var listVar  = collectVar(tree, !partialScope, true);
+
+		for (let i=0; i<listVar.length; i++) {
+			let variableName = listVar[i];
+			newScope.set(variableName, scopeName + variableName);
+		}
+	} else {
+		newScope = scope;
 	}
 
 	if (tree.type === "FunctionDeclaration" || tree.type === "FunctionExpression") {
@@ -359,25 +384,30 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 				}
 				break;
 
-			case "ExpressionStatement":
-				switch(element.expression.type) {
-					case "AssignmentExpression":
-						let symbolicLeft = toSymbolic(element.expression.left, context, false);
-						let symbolicRight = toSymbolic(element.expression.right, context);
+			case "BinaryExpression":
+			case "SequenceExpression":
+				analysis(element, result, newScope, scopeName, true, false);
+				break;
 
-						if (symbolicLeft instanceof Reference) {
-							result.assignations.set(symbolicLeft.name, symbolicRight);
-						} else if (symbolicLeft instanceof MemberExpression) {
-							memberExpressionAssignment(symbolicLeft, symbolicRight, result.assignations);
-						} else {
-							result.assignations.set(symbolicLeft, symbolicRight);
-						}
-						break;
+			case "AssignmentExpression":
+				let symbolicLeft = toSymbolic(element.left, context, false);
+				let symbolicRight = toSymbolic(element.right, context);
 
-					case "CallExpression":
-						let invocation = toSymbolic(element.expression, context);
-						break;
+				if (symbolicLeft instanceof Reference) {
+					result.assignations.set(symbolicLeft.name, symbolicRight);
+				} else if (symbolicLeft instanceof MemberExpression) {
+					memberExpressionAssignment(symbolicLeft, symbolicRight, result.assignations);
+				} else {
+					result.assignations.set(symbolicLeft, symbolicRight);
 				}
+				break;
+
+			case "CallExpression":
+				let invocation = toSymbolic(element, context);
+				break;
+
+			case "ExpressionStatement":
+				analysis(element.expression, result, newScope, scopeName, true, false);
 				break;
 
 			case "FunctionDeclaration":
@@ -386,7 +416,7 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 
 			default:
 				if (element.body) {
-					let resultFunction = analysis(element, result, newScope, scopeName + "LS" + i + CONST_SEPARATOR_ID, true);
+					let resultFunction = analysis(element, result, newScope, scopeName + "LS" + i + CONST_SEPARATOR_ID, true, true);
 					mergeResult(result, resultFunction);
 				}
 				break;
@@ -398,7 +428,7 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 
 		for (let i=0; i<functions.length; i++) {
 			let element = functions[i];
-			let resultFunction = analysis(element, result, newScope, scopeName + "FS" + i + CONST_SEPARATOR_ID, false);
+			let resultFunction = analysis(element, result, newScope, scopeName + "FS" + i + CONST_SEPARATOR_ID, false, true);
 
 			mergeResult(result, resultFunction);
 		}
