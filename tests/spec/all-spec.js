@@ -89,4 +89,11 @@ describe("Edge cases", function () {
 		var missing = checkMissing(found, expected);
 		expect(missing).toEqual([]);
 	});
+
+	it("should support function call when chained", function () {
+		var expected = ["/test123"];
+		var found = runCaseFile("function-call-chained");
+		var missing = checkMissing(found, expected);
+		expect(missing).toEqual([]);
+	});
 });
