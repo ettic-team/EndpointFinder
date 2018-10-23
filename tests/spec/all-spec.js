@@ -96,4 +96,18 @@ describe("Edge cases", function () {
 		var missing = checkMissing(found, expected);
 		expect(missing).toEqual([]);
 	});
+
+	it("should support function call in arguments", function () {
+		var expected = ["/test345"];
+		var found = runCaseFile("function-call-arguments");
+		var missing = checkMissing(found, expected);
+		expect(missing).toEqual([]);
+	});
+
+	it("should support operation separated with comma", function () {
+		var expected = ["/test678"];
+		var found = runCaseFile("operation-separated-with-comma");
+		var missing = checkMissing(found, expected);
+		expect(missing).toEqual([]);
+	});
 });
