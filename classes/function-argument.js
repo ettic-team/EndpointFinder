@@ -19,7 +19,12 @@ FunctionArgument.prototype.equals = function (val) {
 		return false;
 	}
 
-	if (!this.fnct.equals(val.fnct)) {
+	
+	if (typeof this.fnct === "string") {
+		if (val.fnct !== this.fnct) {
+			return false;
+		}	
+	} else if (!this.fnct.equals(val.fnct)) {
 		return false;
 	}
 

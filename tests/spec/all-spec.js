@@ -80,6 +80,23 @@ describe("API support", function () {
 		var missing = checkMissing(found, expected);
 		expect(missing).toEqual([]);
 	});
+
+	it("should support Angular API", function () {
+		var expected = ["/test1", "/test2", "/test3", "/test4", "/test5", "/test6", "/test7"];
+		var found = runCaseFile("angular-basic");
+		var missing = checkMissing(found, expected);
+
+		expect(missing).toEqual([]);
+	});
+
+	it("should support Angular $.inject dependency injection", function () {
+		var expected = ["/test"];
+		var found = runCaseFile("angular-dependency-injection-dollar-inject");
+		var missing = checkMissing(found, expected);
+		
+		expect(missing).toEqual([]);
+		expect(found).not.toContain("/bad");
+	});
 })
 
 describe("Edge cases", function () {
