@@ -12,6 +12,7 @@ var CONST_SEPARATOR_ID = "&&&";
  */
 
 var AnalysisResult     = require("./classes/analysis-result");
+var ArrayStructure     = require("./classes/array-structure");
 var Concatenation      = require("./classes/concatenation");
 var Constant           = require("./classes/constant");
 var Context            = require("./classes/context");
@@ -243,6 +244,14 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 			}
 			return obj;
 
+		case "ArrayExpression":
+			let arr = new ArrayStructure();
+			for (let i=0; i<tree.elements.length; i++) {
+				let element = tree.elements[i];
+				arr.values.push(toSymbolic(element, context));
+			}
+			return arr;
+
 		case "CallExpression":
 			let invocation = new FunctionInvocation();
 			invocation.fnct = toSymbolic(tree.callee, context);
@@ -400,6 +409,35 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 				} else {
 					result.assignations.set(symbolicLeft, symbolicRight);
 				}
+
+				// Dependency injection detection for Angular 1.x (fnct.$inject = [...])
+				// When this kind of binding exists we consider the function injected to be
+				// called with the parameter injected.
+				if (symbolicLeft instanceof MemberExpression && symbolicRight instanceof ArrayStructure) {
+					let leftParts = symbolicLeft.parts;
+					let lastPart = leftParts[leftParts.length - 1];
+					
+					if (lastPart instanceof Constant && lastPart.value === "$inject") {
+						let invocation = new FunctionInvocation();
+						
+						if (leftParts.parts > 2) {
+							invocation.fnct = new MemberExpression(leftParts.slice(0, -1));
+						} else {
+							invocation.fnct = leftParts[0];
+						}
+						
+						invocation.arguments = [];
+
+						for (let i=0; i<symbolicRight.values.length; i++) {
+							let reference = new Reference("G" + CONST_SEPARATOR_ID + symbolicRight.values[i].value);
+							invocation.arguments.push(reference);
+						}
+
+						result.invocations.push(invocation);
+					}
+				}
+
+
 				break;
 
 			case "CallExpression":
@@ -465,7 +503,7 @@ function postProcessingGatherArgument(args) {
 /**
  * Returns the value of an "arg" given the resolved value of the function argument.
  */
-function postProcessingResolveArgumentWithValue(arg, result, functionArgsPosition, resolvedFunctionArgs) {
+function postProcessingResolveArgumentWithValue(arg, result, functionArgsPosition, resolvedFunctionArgs, usePlaceHolderForUnknown = true) {
 	switch (arg.constructor.name) {
 		case "Constant":
 			return arg.value;
@@ -487,13 +525,17 @@ function postProcessingResolveArgumentWithValue(arg, result, functionArgsPositio
 			return resolvedFunctionArgs[positionArg];
 	}
 
-	return "@{VAR}";
+	if (usePlaceHolderForUnknown) {
+		return "@{VAR}";
+	} else {
+		return arg;
+	}
 }
 
 /**
  * Returns the list of all possible value an "arg" value can hold.
  */
-function postProcessingResolveArgument(arg, result) {
+function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown = true) {
 	var functionArgs = postProcessingGatherArgument(arg);
 	var functionArgsPosition = [];
 	var resolvedFunctionArgs = [];
@@ -505,7 +547,7 @@ function postProcessingResolveArgument(arg, result) {
 
 			if (invocation.fnct.constructor.name === "Reference" && invocation.fnct.name === functionArgs[0].fnct) {
 				let toResolve = functionArgs.map(function (arg) { return invocation.arguments[arg.position]; });
-				let res = postProcessingResolveArgument(toResolve, result);
+				let res = postProcessingResolveArgument(toResolve, result, usePlaceHolderForUnknown);
 				
 				functionArgsPosition = functionArgs.map(function (arg) { return arg.position; });
 				resolvedFunctionArgs = resolvedFunctionArgs.concat(res);
@@ -516,7 +558,7 @@ function postProcessingResolveArgument(arg, result) {
 			let res = [];
 
 			for (let j=0; j<arg.length; j++) {
-				res.push(postProcessingResolveArgumentWithValue(arg[j], result, functionArgsPosition, resolvedFunctionArgs[i]))
+				res.push(postProcessingResolveArgumentWithValue(arg[j], result, functionArgsPosition, resolvedFunctionArgs[i], usePlaceHolderForUnknown))
 			}
 
 			output.push(res);
@@ -525,7 +567,7 @@ function postProcessingResolveArgument(arg, result) {
 		let res = [];
 
 		for (let j=0; j<arg.length; j++) {
-			res.push(postProcessingResolveArgumentWithValue(arg[j], result, [], []));
+			res.push(postProcessingResolveArgumentWithValue(arg[j], result, [], [], usePlaceHolderForUnknown));
 		}
 
 		output.push(res);
@@ -548,11 +590,37 @@ function getEndpoints(code) {
 
 	for (let i=0; i<result.invocations.length; i++) {
 		let fnctInvocation = result.invocations[i];
+		let fnct = fnctInvocation.fnct;
+
+		// Normalize so that all function call are handled as MemberExpression
+		// Some of the proprocessing will modify this parts to resolve some element.
+		// We make sure to have a cloned copy to avoid modifying the returned data.
+		if (!(fnct instanceof MemberExpression)) {
+			fnct = new MemberExpression([fnct]);
+		} else {
+			fnct = new MemberExpression(fnct.parts);
+		}
+
+		// Pre-processing to resolve the function called.
+		// This is to handle cases where $, XMLHttpRequest or $http is passed as an argument.
+		for (let j=0; j<fnct.parts.length; j++) {
+			let memberPart = fnct.parts[j];
+
+			let possibleValue = postProcessingResolveArgument([memberPart], result, false);
+
+			if (possibleValue.length !== 1) {
+				continue;
+			}
+
+			if (typeof possibleValue[0][0] !== "string") {
+				fnct.parts[j] = possibleValue[0][0];
+			}
+		}
 
 		// XHR Native API 
-		if (fnctInvocation.fnct.parts && 
-				fnctInvocation.fnct.parts[0].name === "XMLHttpRequest" &&
-				fnctInvocation.fnct.parts[1].value === "open") {
+		if (fnct.parts && 
+				fnct.parts[0].name === "XMLHttpRequest" &&
+				fnct.parts[1].value === "open") {
 
 			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[1]], result);
 
@@ -562,9 +630,9 @@ function getEndpoints(code) {
 		}
 
 		// jQuery API : $.get
-		if (fnctInvocation.fnct.parts &&
-				(fnctInvocation.fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
-				fnctInvocation.fnct.parts[1].value === "get") {
+		if (fnct.parts &&
+				(fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
+				fnct.parts[1].value === "get") {
 
 			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
 
@@ -581,9 +649,9 @@ function getEndpoints(code) {
 		}
 
 		// jQuery API : $.post
-		if (fnctInvocation.fnct.parts &&
-				(fnctInvocation.fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
-				fnctInvocation.fnct.parts[1].value === "post") {
+		if (fnct.parts &&
+				(fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
+				fnct.parts[1].value === "post") {
 
 			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
 
@@ -600,9 +668,9 @@ function getEndpoints(code) {
 		}
 
 		// jQuery API : $.ajax
-		if (fnctInvocation.fnct.parts &&
-				(fnctInvocation.fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
-				fnctInvocation.fnct.parts[1].value === "ajax") {
+		if (fnct.parts &&
+				(fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
+				fnct.parts[1].value === "ajax") {
 
 			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
 
@@ -617,7 +685,101 @@ function getEndpoints(code) {
 				}
 			}	
 		}
+
+		// AngularJS $http.get
+		if (fnct.parts &&
+				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
+				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
+				fnct.parts[1].value === "get") {
+
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
+
+			for (let j=0; j<possibleValue.length; j++) {
+				endpoints.push(possibleValue[j][0]);
+			}	
+		}
+
+		// AngularJS $http.post
+		if (fnct.parts &&
+				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
+				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
+				fnct.parts[1].value === "post") {
+
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
+
+			for (let j=0; j<possibleValue.length; j++) {
+				endpoints.push(possibleValue[j][0]);
+			}	
+		}
+
+		// AngularJS $http.delete
+		if (fnct.parts &&
+				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
+				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
+				fnct.parts[1].value === "delete") {
+
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
+
+			for (let j=0; j<possibleValue.length; j++) {
+				endpoints.push(possibleValue[j][0]);
+			}	
+		}
+
+		// AngularJS $http.patch
+		if (fnct.parts &&
+				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
+				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
+				fnct.parts[1].value === "patch") {
+
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
+
+			for (let j=0; j<possibleValue.length; j++) {
+				endpoints.push(possibleValue[j][0]);
+			}	
+		}
+
+		// AngularJS $http.put
+		if (fnct.parts &&
+				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
+				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
+				fnct.parts[1].value === "put") {
+
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
+
+			for (let j=0; j<possibleValue.length; j++) {
+				endpoints.push(possibleValue[j][0]);
+			}	
+		}
+
+		// AngularJS $http.head
+		if (fnct.parts &&
+				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
+				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
+				fnct.parts[1].value === "head") {
+
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
+
+			for (let j=0; j<possibleValue.length; j++) {
+				endpoints.push(possibleValue[j][0]);
+			}	
+		}
+
+		// AngularJS $http.jsonp
+		if (fnct.parts &&
+				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
+				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
+				fnct.parts[1].value === "jsonp") {
+
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
+
+			for (let j=0; j<possibleValue.length; j++) {
+				endpoints.push(possibleValue[j][0]);
+			}	
+		}
+		
 	}
+
+
 
 	return endpoints;
 }
