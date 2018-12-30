@@ -20,7 +20,7 @@ function checkMissing(resultFound, resultExpected) {
 	return missing;
 }
 
-describe("Basic", function () {
+describe("Basic - ", function () {
 	it("should support function call", function () {
 		var expected = ["/test1", "/test2"];
 		var found = runCaseFile("function-call");
@@ -66,7 +66,7 @@ describe("Basic", function () {
 });
 
 
-describe("API support", function () {
+describe("API support - ", function () {
 	it("should support native XHR API", function () {
 		var expected = ["/test"];
 		var found = runCaseFile("xhr-simple");
@@ -99,7 +99,7 @@ describe("API support", function () {
 	});
 })
 
-describe("Edge cases", function () {
+describe("Edge cases - ", function () {
 	it("should support variable assignment to undeclared variable", function () {
 		var expected = ["/test"];
 		var found = runCaseFile("undeclared-variable");
@@ -124,6 +124,20 @@ describe("Edge cases", function () {
 	it("should support operation separated with comma", function () {
 		var expected = ["/test678"];
 		var found = runCaseFile("operation-separated-with-comma");
+		var missing = checkMissing(found, expected);
+		expect(missing).toEqual([]);
+	});
+
+	it("should support nested function that aren't called in the body", function () {
+		var expected = ["/test9010901", "/test9010902"];
+		var found = runCaseFile("function-nested-indirect-call");
+		var missing = checkMissing(found, expected);
+		expect(missing).toEqual([]);
+	});
+
+	it("should support argument that come from different nested function", function () {
+		var expected = ["/test9010903/@{VAR}"];
+		var found = runCaseFile("function-nested-indirect-call-args-from-different-function");
 		var missing = checkMissing(found, expected);
 		expect(missing).toEqual([]);
 	});

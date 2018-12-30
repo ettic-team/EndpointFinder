@@ -6,6 +6,7 @@ var fs = require("fs");
  */
 
 var CONST_SEPARATOR_ID = "&&&";
+var PLACEHOLDER_VARIABLE = "@{VAR}"
 
 /**
  * Classes to represent the stucture used in the utility.
@@ -503,33 +504,69 @@ function postProcessingGatherArgument(args) {
 /**
  * Returns the value of an "arg" given the resolved value of the function argument.
  */
-function postProcessingResolveArgumentWithValue(arg, result, functionArgsPosition, resolvedFunctionArgs, usePlaceHolderForUnknown = true) {
+function postProcessingResolveArgumentWithValue(arg, result, functionReference, functionArgsPosition, resolvedFunctionArgs, usePlaceHolderForUnknown = true) {
+	var symbolicValue;
+	var evaluatedValue;
+	var finished = true; // If there are remaining function argument that weren't replaced.
+
 	switch (arg.constructor.name) {
 		case "Constant":
-			return arg.value;
+			evaluatedValue = arg.value;
+			symbolicValue = arg;
+			break;
 
 		case "ObjectStructure":
-			let obj = {};
+			symbolicValue = new ObjectStructure(arg.type);
+			evaluatedValue = {};
+
 			arg.properties.forEach(function (value, key, map) {
-				obj[key] = postProcessingResolveArgumentWithValue(value, result, functionArgsPosition, resolvedFunctionArgs);
+				var subResult = postProcessingResolveArgumentWithValue(value, result, functionArgsPosition, resolvedFunctionArgs);
+
+				evaluatedValue[key] = subResult.evaluated;
+				symbolicValue.properties.set(key, subResult.symbolic);
+				finished &= subResult.finished;
 			});
-			return obj;
+			break;
 
 		case "Concatenation":
-			let leftSide = postProcessingResolveArgumentWithValue(arg.values[0], result, functionArgsPosition, resolvedFunctionArgs);
-			let rightSide = postProcessingResolveArgumentWithValue(arg.values[1], result, functionArgsPosition, resolvedFunctionArgs);
-			return leftSide + rightSide;
+			let leftSide = postProcessingResolveArgumentWithValue(arg.values[0], result, functionReference, functionArgsPosition, resolvedFunctionArgs);
+			let rightSide = postProcessingResolveArgumentWithValue(arg.values[1], result, functionReference, functionArgsPosition, resolvedFunctionArgs);
+
+			evaluatedValue = leftSide.evaluated + rightSide.evaluated;
+			symbolicValue = new Concatenation(leftSide.symbolic, rightSide.symbolic);
+			finished &= leftSide.finished && rightSide.finished;
+			break;
 
 		case "FunctionArgument":
-			let positionArg = functionArgsPosition.indexOf(arg.position);
-			return resolvedFunctionArgs[positionArg];
+			// This check makes sure that when we replace a function argument, it's for an arguement of the right function.
+			if (arg.fnct === functionReference && functionArgsPosition.indexOf(arg.position) !== -1) {
+				let positionArg = functionArgsPosition.indexOf(arg.position);
+				evaluatedValue = resolvedFunctionArgs[positionArg];
+				symbolicValue = evaluatedValue;
+			} else {
+				// In this branch we hit a function argument 
+				finished = false;
+				evaluatedValue = PLACEHOLDER_VARIABLE;
+				symbolicValue = arg;
+			}
+			break;
+
+		default:
+			symbolicValue = arg;
+
+			if (usePlaceHolderForUnknown) {
+				evaluatedValue = PLACEHOLDER_VARIABLE;
+			} else {
+				evaluatedValue = arg;
+			}
+			break
 	}
 
-	if (usePlaceHolderForUnknown) {
-		return "@{VAR}";
-	} else {
-		return arg;
-	}
+	return {
+		symbolic : symbolicValue,
+		evaluated : evaluatedValue,
+		finished : finished
+	};
 }
 
 /**
@@ -539,9 +576,20 @@ function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown = t
 	var functionArgs = postProcessingGatherArgument(arg);
 	var functionArgsPosition = [];
 	var resolvedFunctionArgs = [];
-	var output = [];
+
+	// This prioritizes which function argument to resolve first.
+	// The priority goes to function parameter that are deeper.
+	functionArgs.sort(function (functionArgA, functionArgB) {
+		var valueA = functionArgA.fnct.split(CONST_SEPARATOR_ID).length;
+		var valueB = functionArgB.fnct.split(CONST_SEPARATOR_ID).length;
+
+		// Descending order
+		return valueB - valueA;
+	});
 
 	if (functionArgs.length > 0) {
+		let functionReference = functionArgs[0].fnct;
+
 		for (let i=0; i<result.invocations.length; i++) {
 			let invocation = result.invocations[i];
 
@@ -554,26 +602,59 @@ function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown = t
 			}
 		}
 
+		// If no invocation to the function are found, we consider the function argument to have unknown possible value.
+		if (resolvedFunctionArgs.length === 0) {
+			functionArgsPosition = [ functionArgs[0].position ];
+			resolvedFunctionArgs = [ PLACEHOLDER_VARIABLE ];
+		}
+
+		let finished = true;
+		let outputFull = [];
+		let outputEvaluated = [];
+		let intermediateSymbolic = [];
+
 		for (let i=0; i<resolvedFunctionArgs.length; i++) {
-			let res = [];
+			let resOutputFull = [];
+			let resOutputEvaluated = [];
+			let resIntermediateSymbolic = [];
 
 			for (let j=0; j<arg.length; j++) {
-				res.push(postProcessingResolveArgumentWithValue(arg[j], result, functionArgsPosition, resolvedFunctionArgs[i], usePlaceHolderForUnknown))
+				let argResult = postProcessingResolveArgumentWithValue(arg[j], result, functionReference, functionArgsPosition, resolvedFunctionArgs[i], usePlaceHolderForUnknown);
+				resOutputFull.push(argResult);
+				resOutputEvaluated.push(argResult.evaluated);
+				resIntermediateSymbolic.push(argResult.symbolic);
+				finished &= argResult.finished;
 			}
 
-			output.push(res);
+			outputFull.push(resOutputFull);
+			outputEvaluated.push(resOutputEvaluated);
+			intermediateSymbolic.push(resIntermediateSymbolic);
 		}
+
+		// If all argument variable have been considered we are done.
+		if (finished) {
+			return outputEvaluated;
+		}
+
+		// For this branch there are still argument variable that we haven't tried to resolve.
+		let output = [];
+		for (let i=0; i<intermediateSymbolic.length; i++) {
+			let res = postProcessingResolveArgument(intermediateSymbolic[i], result, usePlaceHolderForUnknown);
+			output = output.concat(res);
+		}
+		return output;
 	} else {
+		// When no argument are found, we simply evaluate it.
+		let output = [];
 		let res = [];
 
 		for (let j=0; j<arg.length; j++) {
-			res.push(postProcessingResolveArgumentWithValue(arg[j], result, [], [], usePlaceHolderForUnknown));
+			res.push(postProcessingResolveArgumentWithValue(arg[j], result, null, [], [], usePlaceHolderForUnknown).evaluated);
 		}
 
 		output.push(res);
+		return output;
 	}
-
-	return output;
 }
 
 /**
