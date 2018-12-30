@@ -503,6 +503,13 @@ function postProcessingGatherArgument(args) {
 
 /**
  * Returns the value of an "arg" given the resolved value of the function argument.
+ *
+ * arg - The value that we will be replacing the symbolic function argument from and generated an "evaluated" value.
+ * result - The result of the first pass analysis.
+ * functionReference - The reference to the function that we are replacing argument.
+ * functionArgsPosition - Array of the argument position of the value contained in "resolvedFunctionArgs".
+ * resolvedFunctionArgs - Array of the argument value.
+ * usePlaceHolderForUnknown - Whether we replace unknown value with the placeholder value.
  */
 function postProcessingResolveArgumentWithValue(arg, result, functionReference, functionArgsPosition, resolvedFunctionArgs, usePlaceHolderForUnknown = true) {
 	var symbolicValue;
@@ -544,7 +551,7 @@ function postProcessingResolveArgumentWithValue(arg, result, functionReference, 
 				evaluatedValue = resolvedFunctionArgs[positionArg];
 				symbolicValue = evaluatedValue;
 			} else {
-				// In this branch we hit a function argument 
+				// In this branch we hit a function argument that we can't replace.
 				finished = false;
 				evaluatedValue = PLACEHOLDER_VARIABLE;
 				symbolicValue = arg;
@@ -593,7 +600,7 @@ function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown = t
 		for (let i=0; i<result.invocations.length; i++) {
 			let invocation = result.invocations[i];
 
-			if (invocation.fnct.constructor.name === "Reference" && invocation.fnct.name === functionArgs[0].fnct) {
+			if (invocation.fnct.constructor.name === "Reference" && invocation.fnct.name === functionReference) {
 				let toResolve = functionArgs.map(function (arg) { return invocation.arguments[arg.position]; });
 				let res = postProcessingResolveArgument(toResolve, result, usePlaceHolderForUnknown);
 				
@@ -641,7 +648,7 @@ function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown = t
 		}
 		return output;
 	} else {
-		// When no argument are found, we simply evaluate it.
+		// When no argument are found, we simply evaluate it with no argument to replace.
 		let output = [];
 		let res = [];
 
