@@ -609,24 +609,20 @@ function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown = t
 		}
 
 		let finished = true;
-		let outputFull = [];
 		let outputEvaluated = [];
 		let intermediateSymbolic = [];
 
 		for (let i=0; i<resolvedFunctionArgs.length; i++) {
-			let resOutputFull = [];
 			let resOutputEvaluated = [];
 			let resIntermediateSymbolic = [];
 
 			for (let j=0; j<arg.length; j++) {
 				let argResult = postProcessingResolveArgumentWithValue(arg[j], result, functionReference, functionArgsPosition, resolvedFunctionArgs[i], usePlaceHolderForUnknown);
-				resOutputFull.push(argResult);
 				resOutputEvaluated.push(argResult.evaluated);
 				resIntermediateSymbolic.push(argResult.symbolic);
 				finished &= argResult.finished;
 			}
 
-			outputFull.push(resOutputFull);
 			outputEvaluated.push(resOutputEvaluated);
 			intermediateSymbolic.push(resIntermediateSymbolic);
 		}
@@ -637,6 +633,7 @@ function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown = t
 		}
 
 		// For this branch there are still argument variable that we haven't tried to resolve.
+		// We redo the same analysis, but with the intermediate symbolic value that has at least the first argument resolved.
 		let output = [];
 		for (let i=0; i<intermediateSymbolic.length; i++) {
 			let res = postProcessingResolveArgument(intermediateSymbolic[i], result, usePlaceHolderForUnknown);
