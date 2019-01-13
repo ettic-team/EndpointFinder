@@ -1,5 +1,4 @@
 var acorn = require("acorn");
-var fs = require("fs");
 
 /**
  * Constant
@@ -175,7 +174,11 @@ function resolveMemberExpression(flattenMemberExpression, context) {
  * @param context           - Context object
  * @param resolveIdentifier - Whether or not identifier value should be ressolved. 
  */
-function toSymbolic(tree, context, resolveIdentfier = true) {
+function toSymbolic(tree, context, resolveIdentfier) {
+	if (typeof resolveIdentfier === "undefined") {
+		resolveIdentfier = true;
+	}
+
 	switch (tree.type) {
 		case "Literal":
 			return new Constant(tree.value);
@@ -322,7 +325,29 @@ function mergeResult(result1, result2) {
  *  - The list of all the function call.
  *  - The list of all the variable and their symbolic value.
  */
-function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeName = "G" + CONST_SEPARATOR_ID, partialScope = false, useNewScope = true) {
+function analysis(tree, result, scope, scopeName, partialScope, useNewScope) {
+	// Default value - START
+	if (typeof result === "undefined") {
+		result = new AnalysisResult();
+	}
+
+	if (typeof scope === "undefined") {
+		scope = new Map();
+	}
+
+	if (typeof scopeName === "undefined") {
+		scopeName = "G" + CONST_SEPARATOR_ID;
+	}
+
+	if (typeof partialScope === "undefined") {
+		partialScope = false;
+	}
+
+	if (typeof useNewScope === "undefined") {
+		useNewScope = true;
+	}
+	// Default value - END
+
 	if (tree.body && !Array.isArray(tree.body)) {
 		tree.body = [tree.body];
 	}
@@ -511,7 +536,11 @@ function postProcessingGatherArgument(args) {
  * resolvedFunctionArgs - Array of the argument value.
  * usePlaceHolderForUnknown - Whether we replace unknown value with the placeholder value.
  */
-function postProcessingResolveArgumentWithValue(arg, result, functionReference, functionArgsPosition, resolvedFunctionArgs, usePlaceHolderForUnknown = true) {
+function postProcessingResolveArgumentWithValue(arg, result, functionReference, functionArgsPosition, resolvedFunctionArgs, usePlaceHolderForUnknown) {
+	if (typeof usePlaceHolderForUnknown === "undefined") {
+		usePlaceHolderForUnknown = true;
+	}
+
 	var symbolicValue;
 	var evaluatedValue;
 	var finished = true; // If there are remaining function argument that weren't replaced.
@@ -579,7 +608,11 @@ function postProcessingResolveArgumentWithValue(arg, result, functionReference, 
 /**
  * Returns the list of all possible value an "arg" value can hold.
  */
-function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown = true) {
+function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown) {
+	if (typeof usePlaceHolderForUnknown === "undefined") {
+		usePlaceHolderForUnknown = true;
+	}
+
 	var functionArgs = postProcessingGatherArgument(arg);
 	var functionArgsPosition = [];
 	var resolvedFunctionArgs = [];
@@ -596,6 +629,7 @@ function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown = t
 
 	if (functionArgs.length > 0) {
 		let functionReference = functionArgs[0].fnct;
+		let output = [];
 
 		for (let i=0; i<result.invocations.length; i++) {
 			let invocation = result.invocations[i];
@@ -641,7 +675,6 @@ function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown = t
 
 		// For this branch there are still argument variable that we haven't tried to resolve.
 		// We redo the same analysis, but with the intermediate symbolic value that has at least the first argument resolved.
-		let output = [];
 		for (let i=0; i<intermediateSymbolic.length; i++) {
 			let res = postProcessingResolveArgument(intermediateSymbolic[i], result, usePlaceHolderForUnknown);
 			output = output.concat(res);

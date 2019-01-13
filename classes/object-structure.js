@@ -1,6 +1,10 @@
 /// class ObjectStructure
 
-function ObjectStructure(type = "G$Object") {
+function ObjectStructure(type) {
+	if (typeof type === "undefined") {
+		type = "G$Object";
+	}
+	
 	this.properties = new Map();
 	this.type = type;
 }
