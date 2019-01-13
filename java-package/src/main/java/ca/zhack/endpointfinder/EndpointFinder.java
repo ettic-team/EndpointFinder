@@ -1,11 +1,13 @@
 package ca.zhack.endpointfinder;
 
 
+import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Scanner;
 
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -20,10 +22,12 @@ public class EndpointFinder {
 	
 	static {
 		try {
-			URL mainURL = EndpointFinder.class.getClassLoader().getResource("main.js");
-			Path mainPath = Paths.get(mainURL.toURI());
-			ENDPOINT_FINDER_SCRIPT = new String(Files.readAllBytes(mainPath));
+			InputStream input = EndpointFinder.class.getResourceAsStream("/ca/zhack/endpointfinder/main.js");
+			Scanner s = new Scanner(input).useDelimiter("\\A");
+			ENDPOINT_FINDER_SCRIPT = s.next();
+			s.close();
 		} catch (Exception e) {
+			System.out.println("Failed to read the main file ...");
 			throw new RuntimeException("Unable to load the main script of endpoint finder. Something is wrong with the JAR.", e);
 		}
 		

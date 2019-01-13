@@ -736,7 +736,7 @@ function getEndpoints(code) {
 		}
 
 		// XHR Native API 
-		if (fnct.parts && 
+		if (fnct.parts && fnct.parts.length == 2 &&
 				fnct.parts[0].name === "XMLHttpRequest" &&
 				fnct.parts[1].value === "open") {
 
@@ -748,7 +748,7 @@ function getEndpoints(code) {
 		}
 
 		// jQuery API : $.get
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnct.parts[1].value === "get") {
 
@@ -767,7 +767,7 @@ function getEndpoints(code) {
 		}
 
 		// jQuery API : $.post
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnct.parts[1].value === "post") {
 
@@ -786,7 +786,7 @@ function getEndpoints(code) {
 		}
 
 		// jQuery API : $.ajax
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnct.parts[1].value === "ajax") {
 
@@ -805,7 +805,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.get
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "get") {
@@ -818,7 +818,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.post
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "post") {
@@ -831,7 +831,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.delete
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "delete") {
@@ -844,7 +844,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.patch
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "patch") {
@@ -857,7 +857,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.put
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "put") {
@@ -870,7 +870,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.head
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "head") {
@@ -883,7 +883,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.jsonp
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "jsonp") {
