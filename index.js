@@ -200,6 +200,9 @@ function toSymbolic(tree, context, resolveIdentfier) {
 		case "Identifier":
 			if (resolveIdentfier) {
 				let result = resolveReference(tree.name, context);
+				if (!result.position) {
+					result.position = { start : tree.start, end : tree.end };
+				}
 				return result;
 			} else {
 				if (context.scope.has(tree.name)) {
@@ -227,7 +230,11 @@ function toSymbolic(tree, context, resolveIdentfier) {
 			let memberExpression = flattenMemberExpression(tree, context);
 
 			if (resolveIdentfier) {
-				return resolveMemberExpression(memberExpression, context);
+				let res = resolveMemberExpression(memberExpression, context);
+				if (!res.position) {
+					res.position = { start : tree.start, end : tree.end };
+				}
+				return res;
 			}
 
 			let memberExpr = new MemberExpression(memberExpression);

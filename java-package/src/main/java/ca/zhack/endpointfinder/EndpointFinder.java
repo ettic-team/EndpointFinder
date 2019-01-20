@@ -72,9 +72,9 @@ public class EndpointFinder {
 			
 			for (int j=0; j<listUnknown.getLength(); j++) {
 				NativeObject posEntry = (NativeObject) listUnknown.get(j);
-				Integer start = (Integer) posEntry.get("start");
-				Integer end = (Integer) posEntry.get("end");
-				ep.getUnknownPosition().add(new Position(start, end));
+				double start = (Double) posEntry.get("start");
+				double end = (Double) posEntry.get("end");
+				ep.getUnknownPosition().add(new Position((int)start, (int)end));
 			}
 			
 			result.getEntries().add(ep);
