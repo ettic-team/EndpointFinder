@@ -6,7 +6,7 @@ function FunctionInvocation() {
 }
 
 FunctionInvocation.prototype.equals = function (val) {
-	if (val.constructor.name !== "Unknown") {
+	if (val.constructor.name !== "FunctionInvocation") {
 		return false;
 	}
 

@@ -26,6 +26,17 @@ var ObjectStructure    = require("./classes/object-structure");
 var Reference          = require("./classes/reference");
 var Unknown            = require("./classes/unknown");
 
+function debug(message) {
+	if (typeof console === "undefined") {
+		if (typeof message !== "string") {
+			message = JSON.stringify(message);
+		}
+		System.println(message + "");
+	} else {
+		console.log(message);
+	}
+}
+
 /**
  * Analysis function
  */
@@ -132,11 +143,12 @@ function flattenMemberExpression(memberExpression, context) {
  */
 function resolveReference(variableName, context) {
 	let referenceIdentifier = context.scope.get(variableName);
-
+	
 	if (context.result.assignations.has(referenceIdentifier)) {
-		return context.result.assignations.get(referenceIdentifier);
+		let res = context.result.assignations.get(referenceIdentifier);
+		return res;
 	} else {
-		if (typeof referenceIdentifier === "undefined") {
+		if (typeof referenceIdentifier === "undefined" || referenceIdentifier === null) {
 			referenceIdentifier = "G" + CONST_SEPARATOR_ID + variableName;
 		}
 		return new Reference(referenceIdentifier);
@@ -415,7 +427,7 @@ function analysis(tree, result, scope, scopeName, partialScope, useNewScope) {
 
 			if (arg.type === "Identifier") {
 				newScope.set(arg.name, scopeName + arg.name);
-				let fnctReference = "???"; //anonymous function, need to deal with it
+				let fnctReference = "anon" + (Math.random().toString(16).substr(2)); //anonymous function, need to deal with it
 				if (tree.id && tree.id.name) {
 					fnctReference = scope.get(tree.id.name);
 				}

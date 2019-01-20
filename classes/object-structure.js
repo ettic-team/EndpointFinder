@@ -1,7 +1,7 @@
 /// class ObjectStructure
 
 function ObjectStructure(type) {
-	if (typeof type === "undefined") {
+	if (typeof type === "undefined" || type === null) {
 		type = "G$Object";
 	}
 	
@@ -18,7 +18,7 @@ ObjectStructure.prototype.equals = function (val) {
 		return false;
 	}
 
-	if (val.properties.size() !== this.properties.size() || !val.type.equals(this.type)) {
+	if (val.properties.size !== this.properties.size || val.type !== this.type) {
 		return false;
 	}
 

@@ -7,9 +7,11 @@ import java.util.Map.Entry;
 
 import org.mozilla.javascript.Callable;
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
+import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 
 /**
@@ -20,6 +22,18 @@ import org.mozilla.javascript.annotations.JSFunction;
 public class Map extends ScriptableObject {
 
 	private java.util.Map<Object, Object> internalMap = new HashMap<Object, Object>();
+	
+	public static Object jsConstructor(Context cx, Object[] args, Function functionObject, boolean isNew) {
+		if (args.length > 0 && args[0] instanceof Map) {
+			Map copy = new Map();
+			for(Entry<Object, Object> v : ((Map)args[0]).internalMap.entrySet()) {
+				copy.internalMap.put(v.getKey(), v.getValue());
+			}
+			return copy;
+		} else {
+			return new Map();
+		}
+	}
 	
 	@Override
 	public String getClassName() {
