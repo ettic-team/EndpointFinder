@@ -3,15 +3,12 @@ package ca.zhack.endpointfinder;
 
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Scanner;
 
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.NativeArray;
+import org.mozilla.javascript.NativeObject;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 
@@ -67,8 +64,20 @@ public class EndpointFinder {
 		NativeArray jsResult = (NativeArray) fnctGetEndpoints.call(cx, scope, null, new String[] { code });
 		
 		for (int i=0; i<jsResult.getLength(); i++) {
-			String entry = Context.toString(jsResult.get(i, jsResult));
-			result.getEntries().add(new EndpointEntry(entry));
+			NativeObject entry = (NativeObject) jsResult.get(i);
+			String path = entry.get("output").toString();
+			NativeArray listUnknown = (NativeArray) entry.get("unknownPosition");
+			
+			EndpointEntry ep = new EndpointEntry(path);
+			
+			for (int j=0; j<listUnknown.getLength(); j++) {
+				NativeObject posEntry = (NativeObject) listUnknown.get(j);
+				Integer start = (Integer) posEntry.get("start");
+				Integer end = (Integer) posEntry.get("end");
+				ep.getUnknownPosition().add(new Position(start, end));
+			}
+			
+			result.getEntries().add(ep);
 		}
 		
 		return result;

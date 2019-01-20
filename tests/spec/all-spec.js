@@ -5,7 +5,7 @@ var fs = require('fs');
 function runCaseFile(caseName) {
 	var code = fs.readFileSync("tests/cases/" + caseName + ".js");
 	var result = finder.getEndpoints(code);
-	return result;
+	return result.map(function (res) { return res.output });
 }
 
 function checkMissing(resultFound, resultExpected) {
@@ -75,7 +75,7 @@ describe("API support - ", function () {
 	});
 
 	it("should support jQuery API", function () {
-		var expected = ["/test1", "/test2", "/test3", "/test4", "/test5"];
+		var expected = ["/test1", "/test2", "/test3", "/test4", "/test5", "/test6"];
 		var found = runCaseFile("jquery-simple");
 		var missing = checkMissing(found, expected);
 		expect(missing).toEqual([]);
