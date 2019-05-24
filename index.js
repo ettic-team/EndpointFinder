@@ -1,11 +1,11 @@
 var acorn = require("acorn");
-var fs = require("fs");
 
 /**
  * Constant
  */
 
 var CONST_SEPARATOR_ID = "&&&";
+var PLACEHOLDER_VARIABLE = "@{VAR}"
 
 /**
  * Classes to represent the stucture used in the utility.
@@ -25,6 +25,17 @@ var ObjectFunctionCall = require("./classes/object-function-call");
 var ObjectStructure    = require("./classes/object-structure");
 var Reference          = require("./classes/reference");
 var Unknown            = require("./classes/unknown");
+
+function debug(message) {
+	if (typeof console === "undefined") {
+		if (typeof message !== "string") {
+			message = JSON.stringify(message);
+		}
+		System.println(message + "");
+	} else {
+		console.log(message);
+	}
+}
 
 /**
  * Analysis function
@@ -132,11 +143,12 @@ function flattenMemberExpression(memberExpression, context) {
  */
 function resolveReference(variableName, context) {
 	let referenceIdentifier = context.scope.get(variableName);
-
+	
 	if (context.result.assignations.has(referenceIdentifier)) {
-		return context.result.assignations.get(referenceIdentifier);
+		let res = context.result.assignations.get(referenceIdentifier);
+		return res;
 	} else {
-		if (typeof referenceIdentifier === "undefined") {
+		if (typeof referenceIdentifier === "undefined" || referenceIdentifier === null) {
 			referenceIdentifier = "G" + CONST_SEPARATOR_ID + variableName;
 		}
 		return new Reference(referenceIdentifier);
@@ -174,29 +186,43 @@ function resolveMemberExpression(flattenMemberExpression, context) {
  * @param context           - Context object
  * @param resolveIdentifier - Whether or not identifier value should be ressolved. 
  */
-function toSymbolic(tree, context, resolveIdentfier = true) {
+function toSymbolic(tree, context, resolveIdentfier) {
+	if (typeof resolveIdentfier === "undefined") {
+		resolveIdentfier = true;
+	}
+
 	switch (tree.type) {
 		case "Literal":
-			return new Constant(tree.value);
+			let constant = new Constant(tree.value);
+			constant.position = { start : tree.start, end : tree.end };
+			return constant;
 
 		case "Identifier":
 			if (resolveIdentfier) {
 				let result = resolveReference(tree.name, context);
+				if (!result.position) {
+					result.position = { start : tree.start, end : tree.end };
+				}
 				return result;
 			} else {
 				if (context.scope.has(tree.name)) {
 					let referenceIdentifier = context.scope.get(tree.name);
-					return new Reference(referenceIdentifier);
+					let ref = new Reference(referenceIdentifier);
+					ref.position = { start : tree.start, end : tree.end };
+					return ref;
 				} else {
 					let tmpReference = new Reference("G" + CONST_SEPARATOR_ID + tree.name);
 					context.scope.set(tree.name, tmpReference.name);
+					tmpReference.position = { start : tree.start, end : tree.end };
 					return tmpReference;
 				}
 			}
 
 		case "BinaryExpression":
 			if (tree.operator === "+") {
-				return new Concatenation(toSymbolic(tree.left, context), toSymbolic(tree.right, context));
+				let concat = new Concatenation(toSymbolic(tree.left, context), toSymbolic(tree.right, context));
+				concat.position = { start : tree.start, end : tree.end };
+				return concat;
 			}
 			break;
 
@@ -204,10 +230,16 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 			let memberExpression = flattenMemberExpression(tree, context);
 
 			if (resolveIdentfier) {
-				return resolveMemberExpression(memberExpression, context);
+				let res = resolveMemberExpression(memberExpression, context);
+				if (!res.position) {
+					res.position = { start : tree.start, end : tree.end };
+				}
+				return res;
 			}
 
-			return new MemberExpression(memberExpression);
+			let memberExpr = new MemberExpression(memberExpression);
+			memberExpr.position = { start : tree.start, end : tree.end };
+			return memberExpr;
 
 		case "NewExpression":
 			let args = [];
@@ -219,15 +251,21 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 				let functionName = tree.callee.name;
 
 				if (context.scope.has(functionName)) {
-					return new LocalFunctionCall(context.scope.get(functionName), args);
+					let localFunctionCall = new LocalFunctionCall(context.scope.get(functionName), args);
+					localFunctionCall.position = { start : tree.start, end : tree.end };
+					return localFunctionCall;
 				} else {
-					return new GlobalFunctionCall(functionName, args);
+					let globalFunctionCall = new GlobalFunctionCall(functionName, args);
+					globalFunctionCall.position = { start : tree.start, end : tree.end };
+					return globalFunctionCall;
 				}
 			}
 
 			if (tree.callee.type === "MemberExpression") {
 				let members = flattenMemberExpression(tree.callee);
-				return new ObjectFunctionCall(members, args);
+				let objectFunctionCall = new ObjectFunctionCall(members, args);
+				objectFunctionCall.position = { start : tree.start, end : tree.end };
+				return objectFunctionCall;
 			}
 			break;
 
@@ -242,6 +280,7 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 					obj.properties.set(property.key.name, toSymbolic(property.value, context));
 				}
 			}
+			obj.position = { start : tree.start, end : tree.end };
 			return obj;
 
 		case "ArrayExpression":
@@ -250,6 +289,7 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 				let element = tree.elements[i];
 				arr.values.push(toSymbolic(element, context));
 			}
+			arr.position = { start : tree.start, end : tree.end };
 			return arr;
 
 		case "CallExpression":
@@ -262,11 +302,14 @@ function toSymbolic(tree, context, resolveIdentfier = true) {
 			}
 
 			context.result.invocations.push(invocation);
+			invocation.position = { start : tree.start, end : tree.end };
 			return invocation;
 			
 	}
 
-	return new Unknown();
+	var unknown = new Unknown();
+	unknown.position = { start : tree.start, end : tree.end };
+	return unknown;
 }
 
 /**
@@ -321,7 +364,29 @@ function mergeResult(result1, result2) {
  *  - The list of all the function call.
  *  - The list of all the variable and their symbolic value.
  */
-function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeName = "G" + CONST_SEPARATOR_ID, partialScope = false, useNewScope = true) {
+function analysis(tree, result, scope, scopeName, partialScope, useNewScope) {
+	// Default value - START
+	if (typeof result === "undefined") {
+		result = new AnalysisResult();
+	}
+
+	if (typeof scope === "undefined") {
+		scope = new Map();
+	}
+
+	if (typeof scopeName === "undefined") {
+		scopeName = "G" + CONST_SEPARATOR_ID;
+	}
+
+	if (typeof partialScope === "undefined") {
+		partialScope = false;
+	}
+
+	if (typeof useNewScope === "undefined") {
+		useNewScope = true;
+	}
+	// Default value - END
+
 	if (tree.body && !Array.isArray(tree.body)) {
 		tree.body = [tree.body];
 	}
@@ -369,11 +434,13 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 
 			if (arg.type === "Identifier") {
 				newScope.set(arg.name, scopeName + arg.name);
-				let fnctReference = "???"; //anonymous function, need to deal with it
+				let fnctReference = "anon" + (Math.random().toString(16).substr(2)); //anonymous function, need to deal with it
 				if (tree.id && tree.id.name) {
 					fnctReference = scope.get(tree.id.name);
 				}
-				result.assignations.set(scopeName + arg.name, new FunctionArgument(fnctReference, arg.name, i));
+				let fnctArg = new FunctionArgument(fnctReference, arg.name, i);
+				fnctArg.position = { start: arg.start, end: arg.end };
+				result.assignations.set(scopeName + arg.name, fnctArg);
 			}
 		}
 	}
@@ -518,78 +585,181 @@ function postProcessingGatherArgument(args) {
 
 /**
  * Returns the value of an "arg" given the resolved value of the function argument.
+ *
+ * arg - The value that we will be replacing the symbolic function argument from and generated an "evaluated" value.
+ * result - The result of the first pass analysis.
+ * functionReference - The reference to the function that we are replacing argument.
+ * functionArgsPosition - Array of the argument position of the value contained in "resolvedFunctionArgs".
+ * resolvedFunctionArgs - Array of the argument value.
+ * usePlaceHolderForUnknown - Whether we replace unknown value with the placeholder value.
  */
-function postProcessingResolveArgumentWithValue(arg, result, functionArgsPosition, resolvedFunctionArgs, usePlaceHolderForUnknown = true) {
+function postProcessingResolveArgumentWithValue(arg, result, functionReference, functionArgsPosition, resolvedFunctionArgs, usePlaceHolderForUnknown) {
+	if (typeof usePlaceHolderForUnknown === "undefined") {
+		usePlaceHolderForUnknown = true;
+	}
+
+	var symbolicValue;
+	var evaluatedValue;
+	var finished = true; // If there are remaining function argument that weren't replaced.
+	var unknownPosition = [];
+
 	switch (arg.constructor.name) {
 		case "Constant":
-			return arg.value;
+			evaluatedValue = arg.value;
+			symbolicValue = arg;
+			unknownPosition = [];
+			break;
 
 		case "ObjectStructure":
-			let obj = {};
+			symbolicValue = new ObjectStructure(arg.type);
+			evaluatedValue = {};
+			unknownPosition = {};
+
 			arg.properties.forEach(function (value, key, map) {
-				obj[key] = postProcessingResolveArgumentWithValue(value, result, functionArgsPosition, resolvedFunctionArgs);
+				var subResult = postProcessingResolveArgumentWithValue(value, result, functionArgsPosition, resolvedFunctionArgs);
+
+				evaluatedValue[key] = subResult.evaluated;
+				symbolicValue.properties.set(key, subResult.symbolic);
+				finished &= subResult.finished;
+				unknownPosition[key] = subResult.unknownPosition;
 			});
-			return obj;
+			break;
 
 		case "Concatenation":
-			let leftSide = postProcessingResolveArgumentWithValue(arg.values[0], result, functionArgsPosition, resolvedFunctionArgs);
-			let rightSide = postProcessingResolveArgumentWithValue(arg.values[1], result, functionArgsPosition, resolvedFunctionArgs);
-			return leftSide + rightSide;
+			let leftSide = postProcessingResolveArgumentWithValue(arg.values[0], result, functionReference, functionArgsPosition, resolvedFunctionArgs);
+			let rightSide = postProcessingResolveArgumentWithValue(arg.values[1], result, functionReference, functionArgsPosition, resolvedFunctionArgs);
+
+			evaluatedValue = leftSide.evaluated + rightSide.evaluated;
+			symbolicValue = new Concatenation(leftSide.symbolic, rightSide.symbolic);
+			finished &= leftSide.finished && rightSide.finished;
+			unknownPosition = leftSide.unknownPosition.concat(rightSide.unknownPosition);
+			break;
 
 		case "FunctionArgument":
-			let positionArg = functionArgsPosition.indexOf(arg.position);
-			return resolvedFunctionArgs[positionArg];
+			// This check makes sure that when we replace a function argument, it's for an argument of the right function.
+			if (arg.fnct === functionReference && functionArgsPosition.indexOf(arg.index) !== -1) {
+				positionArg = functionArgsPosition.indexOf(arg.index);
+				evaluatedValue = resolvedFunctionArgs[positionArg];
+				symbolicValue = new Constant(evaluatedValue);
+				unknownPosition = [arg.position];
+			} else {
+				// In this branch we hit a function argument that we can't replace.
+				finished = false;
+				evaluatedValue = PLACEHOLDER_VARIABLE;
+				symbolicValue = arg;
+				unknownPosition = [arg.position];
+			}
+			break;
+
+		default:
+			symbolicValue = arg;
+			unknownPosition = [symbolicValue.position];
+
+			if (usePlaceHolderForUnknown) {
+				evaluatedValue = PLACEHOLDER_VARIABLE;
+			} else {
+				evaluatedValue = arg;
+			}
+			break
 	}
 
-	if (usePlaceHolderForUnknown) {
-		return "@{VAR}";
-	} else {
-		return arg;
-	}
+	return {
+		symbolic : symbolicValue,
+		evaluated : evaluatedValue,
+		finished : finished,
+		unknownPosition : unknownPosition
+	};
 }
 
 /**
  * Returns the list of all possible value an "arg" value can hold.
  */
-function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown = true) {
+function postProcessingResolveArgument(arg, result, usePlaceHolderForUnknown) {
+	if (typeof usePlaceHolderForUnknown === "undefined") {
+		usePlaceHolderForUnknown = true;
+	}
+
 	var functionArgs = postProcessingGatherArgument(arg);
 	var functionArgsPosition = [];
 	var resolvedFunctionArgs = [];
-	var output = [];
+
+	// This prioritizes which function argument to resolve first.
+	// The priority goes to function parameter that are deeper.
+	functionArgs.sort(function (functionArgA, functionArgB) {
+		var valueA = functionArgA.fnct.split(CONST_SEPARATOR_ID).length;
+		var valueB = functionArgB.fnct.split(CONST_SEPARATOR_ID).length;
+
+		// Descending order
+		return valueB - valueA;
+	});
 
 	if (functionArgs.length > 0) {
+		let functionReference = functionArgs[0].fnct;
+		let output = [];
+
 		for (let i=0; i<result.invocations.length; i++) {
 			let invocation = result.invocations[i];
 
-			if (invocation.fnct.constructor.name === "Reference" && invocation.fnct.name === functionArgs[0].fnct) {
-				let toResolve = functionArgs.map(function (arg) { return invocation.arguments[arg.position]; });
+			if (invocation.fnct.constructor.name === "Reference" && invocation.fnct.name === functionReference) {
+				let toResolve = functionArgs.map(function (arg) { return invocation.arguments[arg.index]; });
 				let res = postProcessingResolveArgument(toResolve, result, usePlaceHolderForUnknown);
+				res = res.map(function (val) { return val.map(function (val) { return val.output }); });
 				
-				functionArgsPosition = functionArgs.map(function (arg) { return arg.position; });
+				functionArgsPosition = functionArgs.map(function (arg) { return arg.index; });
 				resolvedFunctionArgs = resolvedFunctionArgs.concat(res);
 			}
 		}
 
+		// If no invocation to the function are found, we consider the function argument to have unknown possible value.
+		if (resolvedFunctionArgs.length === 0) {
+			functionArgsPosition = [ functionArgs[0].index ];
+			resolvedFunctionArgs = [ [ PLACEHOLDER_VARIABLE ] ];
+		}
+
+		let finished = true;
+		let outputEvaluated = [];
+		let intermediateSymbolic = [];
+
 		for (let i=0; i<resolvedFunctionArgs.length; i++) {
-			let res = [];
+			let resOutputEvaluated = [];
+			let resIntermediateSymbolic = [];
 
 			for (let j=0; j<arg.length; j++) {
-				res.push(postProcessingResolveArgumentWithValue(arg[j], result, functionArgsPosition, resolvedFunctionArgs[i], usePlaceHolderForUnknown))
+				let argResult = postProcessingResolveArgumentWithValue(arg[j], result, functionReference, functionArgsPosition, resolvedFunctionArgs[i], usePlaceHolderForUnknown);
+				resOutputEvaluated.push({ output : argResult.evaluated, unknownPosition : argResult.unknownPosition });
+				resIntermediateSymbolic.push(argResult.symbolic);
+				finished &= argResult.finished;
 			}
 
-			output.push(res);
+			outputEvaluated.push(resOutputEvaluated);
+			intermediateSymbolic.push(resIntermediateSymbolic);
 		}
+
+		// If all argument variable have been considered we are done.
+		if (finished) {
+			return outputEvaluated;
+		}
+
+		// For this branch there are still argument variable that we haven't tried to resolve.
+		// We redo the same analysis, but with the intermediate symbolic value that has at least the first argument resolved.
+		for (let i=0; i<intermediateSymbolic.length; i++) {
+			let res = postProcessingResolveArgument(intermediateSymbolic[i], result, usePlaceHolderForUnknown);
+			output = output.concat(res);
+		}
+		return output;
 	} else {
+		// When no argument are found, we simply evaluate it with no argument to replace.
+		let output = [];
 		let res = [];
 
 		for (let j=0; j<arg.length; j++) {
-			res.push(postProcessingResolveArgumentWithValue(arg[j], result, [], [], usePlaceHolderForUnknown));
+			let resWithArg = postProcessingResolveArgumentWithValue(arg[j], result, null, [], [], usePlaceHolderForUnknown);
+			res.push({ output : resWithArg.evaluated, unknownPosition : resWithArg.unknownPosition });
 		}
 
 		output.push(res);
+		return output;
 	}
-
-	return output;
 }
 
 /**
@@ -628,13 +798,13 @@ function getEndpoints(code) {
 				continue;
 			}
 
-			if (typeof possibleValue[0][0] !== "string") {
-				fnct.parts[j] = possibleValue[0][0];
+			if (typeof possibleValue[0][0].output !== "string") {
+				fnct.parts[j] = possibleValue[0][0].output;
 			}
 		}
 
 		// XHR Native API 
-		if (fnct.parts && 
+		if (fnct.parts && fnct.parts.length == 2 &&
 				fnct.parts[0].name === "XMLHttpRequest" &&
 				fnct.parts[1].value === "open") {
 
@@ -646,7 +816,7 @@ function getEndpoints(code) {
 		}
 
 		// jQuery API : $.get
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnct.parts[1].value === "get") {
 
@@ -654,18 +824,18 @@ function getEndpoints(code) {
 
 			for (let j=0; j<possibleValue.length; j++) {
 				// $.get("/path", { ... settings ... })
-				if (typeof possibleValue[j][0] === "string") {
+				if (typeof possibleValue[j][0].output === "string") {
 					endpoints.push(possibleValue[j][0]);
 
 				// $.get({ url : "/path", ... settings ... })
 				} else {
-					endpoints.push(possibleValue[j][0].url);
+					endpoints.push({ output: possibleValue[j][0].output.url, unknownPosition : possibleValue[j][0].unknownPosition.url } );
 				}
 			}	
 		}
 
 		// jQuery API : $.post
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnct.parts[1].value === "post") {
 
@@ -673,18 +843,18 @@ function getEndpoints(code) {
 
 			for (let j=0; j<possibleValue.length; j++) {
 				// $.post("/path", { ... settings ... })
-				if (typeof possibleValue[j][0] === "string") {
+				if (typeof possibleValue[j][0].output === "string") {
 					endpoints.push(possibleValue[j][0]);
 
 				// $.post({ url : "/path", ... settings ... })
 				} else {
-					endpoints.push(possibleValue[j][0].url);
+					endpoints.push({ output: possibleValue[j][0].output.url, unknownPosition : possibleValue[j][0].unknownPosition.url } );
 				}
 			}	
 		}
 
 		// jQuery API : $.ajax
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
 				fnct.parts[1].value === "ajax") {
 
@@ -692,18 +862,31 @@ function getEndpoints(code) {
 
 			for (let j=0; j<possibleValue.length; j++) {
 				// $.ajax("/path", { ... settings ... })
-				if (typeof possibleValue[j][0] === "string") {
+				if (typeof possibleValue[j][0].output === "string") {
 					endpoints.push(possibleValue[j][0]);
 
 				// $.ajax({ url : "/path", ... settings ... })
 				} else {
-					endpoints.push(possibleValue[j][0].url);
+					endpoints.push({ output: possibleValue[j][0].output.url, unknownPosition : possibleValue[j][0].unknownPosition.url } );
 				}
 			}	
 		}
 
+		// jQuery API : $.getJSON
+		if (fnct.parts && fnct.parts.length == 2 &&
+				(fnct.parts[0].name || "").endsWith(CONST_SEPARATOR_ID + "$") &&
+				fnct.parts[1].value === "getJSON") {
+
+			let possibleValue = postProcessingResolveArgument([fnctInvocation.arguments[0]], result);
+
+			for (let j=0; j<possibleValue.length; j++) {
+				// $.getJSON("/path", ...)
+				endpoints.push(possibleValue[j][0]);
+			}	
+		}
+
 		// AngularJS $http.get
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "get") {
@@ -716,7 +899,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.post
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "post") {
@@ -729,7 +912,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.delete
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "delete") {
@@ -742,7 +925,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.patch
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "patch") {
@@ -755,7 +938,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.put
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "put") {
@@ -768,7 +951,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.head
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "head") {
@@ -781,7 +964,7 @@ function getEndpoints(code) {
 		}
 
 		// AngularJS $http.jsonp
-		if (fnct.parts &&
+		if (fnct.parts && fnct.parts.length == 2 &&
 				(fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "$http") || 
 				 fnct.parts[0].name === ("G" + CONST_SEPARATOR_ID + "http"))  &&
 				fnct.parts[1].value === "jsonp") {

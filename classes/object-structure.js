@@ -1,6 +1,10 @@
 /// class ObjectStructure
 
-function ObjectStructure(type = "G$Object") {
+function ObjectStructure(type) {
+	if (typeof type === "undefined" || type === null) {
+		type = "G$Object";
+	}
+	
 	this.properties = new Map();
 	this.type = type;
 }
@@ -14,7 +18,7 @@ ObjectStructure.prototype.equals = function (val) {
 		return false;
 	}
 
-	if (val.properties.size() !== this.properties.size() || !val.type.equals(this.type)) {
+	if (val.properties.size !== this.properties.size || val.type !== this.type) {
 		return false;
 	}
 

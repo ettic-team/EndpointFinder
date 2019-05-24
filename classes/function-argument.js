@@ -1,13 +1,13 @@
 /// class FunctionArgument
 
-function FunctionArgument(fnct, variableName, position) {
+function FunctionArgument(fnct, variableName, index) {
 	this.name = variableName;
 	this.fnct = fnct;
-	this.position = position;
+	this.index = index;
 }
 
 FunctionArgument.prototype.toHumanValue = function () {
-	return "@{arg" + this.position + "(" + this.name + ")}";
+	return "@{arg" + this.index + "(" + this.name + ")}";
 }
 
 FunctionArgument.prototype.equals = function (val) {
@@ -28,7 +28,7 @@ FunctionArgument.prototype.equals = function (val) {
 		return false;
 	}
 
-	if (this.position !== val.position) {
+	if (this.index !== val.index) {
 		return false;
 	}
 
