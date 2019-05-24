@@ -39,6 +39,12 @@ function debug(message) {
 
 exportFnct.debug = debug;
 
+function clone(obj) {
+	return JSON.parse(JSON.stringify(obj));
+}
+
+exportFnct.clone = clone;
+
 /**
  * Analysis function
  */
@@ -345,7 +351,9 @@ function memberExpressionAssignment(left, right, assignations) {
 		// For deep structure we need to do the a recursive assignation.
 		if (mainObj.properties.has(prop.value) && left.parts.length > 2) {
 			let subsetMemberExpression = [mainObj.properties.get(prop.value)].concat(left.parts.slice(2));
-			memberExpressionAssignment(subsetMemberExpression, right, assignations);
+			let leftPartRemaining = clone(left);
+			leftPartRemaining.parts = subsetMemberExpression;
+			memberExpressionAssignment(leftPartRemaining, right, assignations);
 		} else {
 			mainObj.properties.set(prop.value, right);
 		}
