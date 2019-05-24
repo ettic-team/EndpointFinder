@@ -1,5 +1,7 @@
 /// class ObjectFunctionCall
 
+var MemberExpression   = require("./member-expression");
+
 function ObjectFunctionCall(members, args) {
 	this.members = new MemberExpression(members);
 	this.arguments = args;
