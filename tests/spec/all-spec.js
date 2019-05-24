@@ -148,4 +148,12 @@ describe("Edge cases - ", function () {
 		var missing = checkMissing(found, expected);
 		expect(missing).toEqual([]);
 	});
+
+	it("should support deeply nested object assignation", function () {
+		var expected = ["/testbbcc"];
+                var found = runCaseFile("nested-object-assignation");
+                var missing = checkMissing(found, expected);
+                expect(missing).toEqual([]);
+
+	});
 });
