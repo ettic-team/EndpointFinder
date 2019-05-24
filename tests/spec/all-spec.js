@@ -63,6 +63,13 @@ describe("Basic - ", function () {
 		var missing = checkMissing(found, expected);
 		expect(missing).toEqual([]);
 	});
+
+	it("should support add equals operation", function () {
+		var expected = ["/testabc"];
+		var found = runCaseFile("add-equal-operation");
+		var missing = checkMissing(found, expected);
+		expect(missing).toEqual([]);
+	});
 });
 
 
