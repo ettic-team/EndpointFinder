@@ -399,6 +399,22 @@ function analysis(tree, result = new AnalysisResult(), scope = new Map(), scopeN
 				break;
 
 			case "AssignmentExpression":
+				// Operator length of 2 means it's an operation + assignment (ex.: +=)
+				// We rewirte the AST so that "a += b" is handled as "a = a + b"
+				if (element.operator.length === 2) {
+					let newElement = {
+                                                "type" : "BinaryExpression",
+                                                "start" : element.start,
+                                                "end" : element.end,
+						"left" : element.left,
+                                                "operator" : element.operator[0],
+                                                "right" : element.right
+                                        };
+					element.body[1] = newElement;
+					element.right = newElement;
+					element.operator = "=";
+				}
+
 				let symbolicLeft = toSymbolic(element.left, context, false);
 				let symbolicRight = toSymbolic(element.right, context);
 
