@@ -4,7 +4,12 @@
   <artifactId>endpointfinder-java</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   <name>Endpoint Finder Java Integration</name>
-  
+
+  <properties>
+    <maven.compiler.target>1.8</maven.compiler.target>
+    <maven.compiler.source>1.8</maven.compiler.source>
+  </properties>
+
   <!-- https://mvnrepository.com/artifact/rhino/js -->
   <dependencies>
 	<!-- https://mvnrepository.com/artifact/org.mozilla/rhino -->
