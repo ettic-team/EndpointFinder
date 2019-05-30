@@ -3,6 +3,10 @@
 var CONST_SEPARATOR_ID = "&&&";
 
 function Reference(name) {
+	if (typeof name !== "string") {
+		throw new Error("Type of name must be string.");
+	}
+
 	this.name = name;
 }
 

@@ -3,6 +3,10 @@
 var MemberExpression   = require("./member-expression");
 
 function ObjectFunctionCall(members, args) {
+	if (typeof args !== "object" || typeof args.length !== "number") {
+                throw new Error("Type of args must be array.");
+        }	
+
 	this.members = new MemberExpression(members);
 	this.arguments = args;
 }

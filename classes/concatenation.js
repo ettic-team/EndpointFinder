@@ -1,6 +1,14 @@
 /// class Concatenation
 
 function Concatenation(value1, value2) {
+	if (value1 === null) {
+		throw new Error("value1 can't be null");
+	}
+
+	if (value2 === null) {
+		throw new Error("value1 can't be null");
+	}
+	
 	this.values = [];
 	this.values.push(value1);
 	this.values.push(value2);
