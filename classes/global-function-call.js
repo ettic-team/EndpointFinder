@@ -1,6 +1,14 @@
 /// class GlobalFunctionCall
 
 function GlobalFunctionCall(name, args) {
+	if (typeof name !== "string") {
+		throw new Error("Type of name must be string.");
+	}
+
+	if (typeof args !== "object" || typeof args.length !== "number") {
+		throw new Error("Type of args must be array.");
+	}
+	
 	this.name = name;
 	this.arguments = args;
 }

@@ -1,6 +1,18 @@
 /// class FunctionArgument
 
 function FunctionArgument(fnct, variableName, index) {
+	if (!fnct) {
+		throw new Error("Type of fnct must be string or object.");	
+	}
+
+	if (typeof variableName !== "string") {
+		throw new Error("Type of variableName must be string.");
+	}
+
+	if (typeof index !== "number") {
+		throw new Error("Type of index must be number.");
+	}
+	
 	this.name = variableName;
 	this.fnct = fnct;
 	this.index = index;

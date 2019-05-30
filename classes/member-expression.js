@@ -1,6 +1,10 @@
 /// class MemberExpression
 
 function MemberExpression(parts) {
+	if (typeof parts !== "object" || typeof parts.length !== "number") {
+                throw new Error("Type of parts must be array.");
+        }	
+	
 	this.parts = parts;
 }
 

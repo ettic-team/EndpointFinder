@@ -1,6 +1,14 @@
 /// class LocalFunctionCall
 
 function LocalFunctionCall(reference, args) {
+	if (reference == null) {
+		throw new Exception("Reference is null.");
+	}
+
+	if (typeof args !== "object" || typeof args.length !== "number") {
+                throw new Error("Type of args must be array.");
+        }
+
 	this.arguments = args;
 	this.reference = reference;
 }
@@ -19,7 +27,7 @@ LocalFunctionCall.prototype.equals = function (val) {
 		return false;
 	}
 
-	if (!this.reference.equals(val.reference)) {
+	if (this.reference !== val.reference) {
 		return false;
 	} 
 
