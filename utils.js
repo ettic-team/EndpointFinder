@@ -26,6 +26,12 @@ var ObjectStructure    = require("./classes/object-structure");
 var Reference          = require("./classes/reference");
 var Unknown            = require("./classes/unknown");
 
+
+/**
+ * Storage & Query
+ */
+var graph = require("./graph/main");
+
 function debug(message) {
 	if (typeof console === "undefined") {
 		if (typeof message !== "string") {

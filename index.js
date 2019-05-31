@@ -38,12 +38,27 @@ var AngularMatcher = require("./matchers/angular-matcher");
 var MATCHERS = [NativeMatcher, JQueryMatcher, AngularMatcher];
 
 /**
+ * Storage & Query
+ */
+
+var graph = require("./graph/main");
+
+/**
  * Main function of the project. This results an array of endpoint that are invoked
  * by the JavaScript code that supplied as the first argument.
  * 
  * @param code - String value of the JavaScript
+ * @param options - Options of the analysis
  */
-function getEndpoints(code) {
+function getEndpoints(code, options) {
+	// Options
+	options = options || {};
+	options.driver = options.driver || "memory";
+	options.driverOptions = options.driverOptions || {};
+
+	// Set the options of where to store graph information of the code
+	graph.setDriver(options.driver, options.driverOptions);
+	
 	// Main code to test the analysis function
 	var tree = acorn.parse(code);
 	var result = utils.analysis(tree);
