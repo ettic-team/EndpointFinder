@@ -57,12 +57,13 @@ function getEndpoints(code, options) {
 	options.driverOptions = options.driverOptions || {};
 
 	// Set the options of where to store graph information of the code
-	graph.setDriver(options.driver, options.driverOptions);
+	var graph = graph.getInstance(options.driver, options.driverOptions);
 	
-	// Main code to test the analysis function
-	var tree = acorn.parse(code);
-	var result = utils.analysis(tree);
+	// Main code of the analysis function
 	var endpoints = [];
+	var tree = acorn.parse(code);
+	
+	utils.analysis(tree, graph);
 
 	for (let i=0; i<result.invocations.length; i++) {
 		let fnctInvocation = result.invocations[i];

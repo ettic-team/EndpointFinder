@@ -400,12 +400,10 @@ exportFnct.mergeResult = mergeResult;
  *  - The list of all the function call.
  *  - The list of all the variable and their symbolic value.
  */
-function analysis(tree, result, scope, scopeName, partialScope, useNewScope) {
+function analysis(tree, graph, scope, scopeName, partialScope, useNewScope) {
+	// TODO: replace "result" with "graph".
+	
 	// Default value - START
-	if (typeof result === "undefined") {
-		result = new AnalysisResult();
-	}
-
 	if (typeof scope === "undefined") {
 		scope = new Map();
 	}
