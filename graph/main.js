@@ -14,6 +14,6 @@ function getInstance(name, options) {
 	return drivers[name](options);
 }
 
-modules.exports = {
+module.exports = {
 	getInstance : getInstance
 };

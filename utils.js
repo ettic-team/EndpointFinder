@@ -164,8 +164,8 @@ exportFnct.flattenMemberExpression = flattenMemberExpression;
 function resolveReference(variableName, context) {
 	let referenceIdentifier = context.scope.get(variableName);
 	
-	if (context.result.assignations.has(referenceIdentifier)) {
-		let res = context.result.assignations.get(referenceIdentifier);
+	if (context.assignations.has(referenceIdentifier)) {
+		let res = context.assignations.get(referenceIdentifier);
 		return res;
 	} else {
 		if (typeof referenceIdentifier === "undefined" || referenceIdentifier === null) {
@@ -223,6 +223,7 @@ function toSymbolic(tree, context, resolveIdentfier) {
 		case "Literal":
 			let constant = new Constant(tree.value);
 			constant.position = { start : tree.start, end : tree.end };
+			context.graph.addValue(constant);
 			return constant;
 
 		case "Identifier":
@@ -237,11 +238,13 @@ function toSymbolic(tree, context, resolveIdentfier) {
 					let referenceIdentifier = context.scope.get(tree.name);
 					let ref = new Reference(referenceIdentifier);
 					ref.position = { start : tree.start, end : tree.end };
+					context.graph.addValue(ref);
 					return ref;
 				} else {
 					let tmpReference = new Reference("G" + CONST_SEPARATOR_ID + tree.name);
 					context.scope.set(tree.name, tmpReference.name);
 					tmpReference.position = { start : tree.start, end : tree.end };
+					context.graph.addValue(tmpReference);
 					return tmpReference;
 				}
 			}
@@ -250,6 +253,7 @@ function toSymbolic(tree, context, resolveIdentfier) {
 			if (tree.operator === "+") {
 				let concat = new Concatenation(toSymbolic(tree.left, context), toSymbolic(tree.right, context));
 				concat.position = { start : tree.start, end : tree.end };
+				context.graph.addValue(concat);
 				return concat;
 			}
 			break;
@@ -267,6 +271,7 @@ function toSymbolic(tree, context, resolveIdentfier) {
 
 			let memberExpr = new MemberExpression(memberExpression);
 			memberExpr.position = { start : tree.start, end : tree.end };
+			context.graph.addValue(memberExpr);
 			return memberExpr;
 
 		case "NewExpression":
@@ -281,10 +286,12 @@ function toSymbolic(tree, context, resolveIdentfier) {
 				if (context.scope.has(functionName)) {
 					let localFunctionCall = new LocalFunctionCall(context.scope.get(functionName), args);
 					localFunctionCall.position = { start : tree.start, end : tree.end };
+					context.graph.addInvocation(localFunctionCall);
 					return localFunctionCall;
 				} else {
 					let globalFunctionCall = new GlobalFunctionCall(functionName, args);
 					globalFunctionCall.position = { start : tree.start, end : tree.end };
+					context.graph.addInvocation(globalFunctionCall);
 					return globalFunctionCall;
 				}
 			}
@@ -293,6 +300,7 @@ function toSymbolic(tree, context, resolveIdentfier) {
 				let members = flattenMemberExpression(tree.callee, context);
 				let objectFunctionCall = new ObjectFunctionCall(members, args);
 				objectFunctionCall.position = { start : tree.start, end : tree.end };
+				context.graph.addInvocation(objectFunctionCall);
 				return objectFunctionCall;
 			}
 			break;
@@ -309,6 +317,7 @@ function toSymbolic(tree, context, resolveIdentfier) {
 				}
 			}
 			obj.position = { start : tree.start, end : tree.end };
+			context.graph.addValue(obj);
 			return obj;
 
 		case "ArrayExpression":
@@ -318,6 +327,7 @@ function toSymbolic(tree, context, resolveIdentfier) {
 				arr.values.push(toSymbolic(element, context));
 			}
 			arr.position = { start : tree.start, end : tree.end };
+			context.graph.addValue(arr);
 			return arr;
 
 		case "CallExpression":
@@ -329,10 +339,9 @@ function toSymbolic(tree, context, resolveIdentfier) {
 				invocation.arguments.push(toSymbolic(tree.arguments[j], context));
 			}
 
-			context.result.invocations.push(invocation);
 			invocation.position = { start : tree.start, end : tree.end };
+			context.graph.addInvocation(invocation);
 			return invocation;
-			
 	}
 
 	var unknown = new Unknown();
@@ -400,18 +409,10 @@ exportFnct.mergeResult = mergeResult;
  *  - The list of all the function call.
  *  - The list of all the variable and their symbolic value.
  */
-function analysis(tree, graph, scope, scopeName, partialScope, useNewScope) {
+function analysis(tree, context, partialScope, useNewScope) {
 	// TODO: replace "result" with "graph".
 	
 	// Default value - START
-	if (typeof scope === "undefined") {
-		scope = new Map();
-	}
-
-	if (typeof scopeName === "undefined") {
-		scopeName = "G" + CONST_SEPARATOR_ID;
-	}
-
 	if (typeof partialScope === "undefined") {
 		partialScope = false;
 	}
@@ -450,6 +451,10 @@ function analysis(tree, graph, scope, scopeName, partialScope, useNewScope) {
 		return new Map();
 	}
 
+	var scope = context.scope;
+	var scopeName = context.scopeName;
+	var graph = context.graph;
+
 	if (useNewScope) {
 		var newScope = new Map(scope);
 		var listVar  = collectVar(tree, !partialScope, true);
@@ -474,12 +479,10 @@ function analysis(tree, graph, scope, scopeName, partialScope, useNewScope) {
 				}
 				let fnctArg = new FunctionArgument(fnctReference, arg.name, i);
 				fnctArg.position = { start: arg.start, end: arg.end };
-				result.assignations.set(scopeName + arg.name, fnctArg);
+				context.assignations.set(scopeName + arg.name, fnctArg);
 			}
 		}
 	}
-
-	var context = new Context(newScope, result, scopeName);
 
 	for (let i=0; i<tree.body.length; i++) {
 		let element = tree.body[i];
@@ -489,14 +492,16 @@ function analysis(tree, graph, scope, scopeName, partialScope, useNewScope) {
 				for (let j=0; j<element.declarations.length; j++) {
 					let variable = element.declarations[j];
 					if (variable.init) {
-						result.assignations.set(newScope.get(variable.id.name), toSymbolic(variable.init, context));
+						context.assignations.set(newScope.get(variable.id.name), toSymbolic(variable.init, context));
 					}
 				}
 				break;
 
 			case "BinaryExpression":
 			case "SequenceExpression":
-				analysis(element, result, newScope, scopeName, true, false);
+				var newContext = context.clone();
+				newContext.scope = newScope;
+				analysis(element, newContext, true, false);
 				break;
 
 			case "AssignmentExpression":
@@ -504,13 +509,13 @@ function analysis(tree, graph, scope, scopeName, partialScope, useNewScope) {
 				// We rewirte the AST so that "a += b" is handled as "a = a + b"
 				if (element.operator.length === 2) {
 					let newElement = {
-                                                "type" : "BinaryExpression",
-                                                "start" : element.start,
-                                                "end" : element.end,
+						"type" : "BinaryExpression",
+						"start" : element.start,
+						"end" : element.end,
 						"left" : element.left,
-                                                "operator" : element.operator[0],
-                                                "right" : element.right
-                                        };
+						"operator" : element.operator[0],
+						"right" : element.right
+					};
 					element.right = newElement;
 					element.operator = "=";
 				}
@@ -519,11 +524,11 @@ function analysis(tree, graph, scope, scopeName, partialScope, useNewScope) {
 				let symbolicRight = toSymbolic(element.right, context);
 
 				if (symbolicLeft instanceof Reference) {
-					result.assignations.set(symbolicLeft.name, symbolicRight);
+					context.assignations.set(symbolicLeft.name, symbolicRight);
 				} else if (symbolicLeft instanceof MemberExpression) {
 					memberExpressionAssignment(symbolicLeft, symbolicRight, result.assignations);
 				} else {
-					result.assignations.set(symbolicLeft, symbolicRight);
+					context.assignations.set(symbolicLeft, symbolicRight);
 				}
 
 				// Dependency injection detection for Angular 1.x (fnct.$inject = [...])
@@ -561,7 +566,9 @@ function analysis(tree, graph, scope, scopeName, partialScope, useNewScope) {
 				break;
 
 			case "ExpressionStatement":
-				analysis(element.expression, result, newScope, scopeName, true, false);
+				var newContext = context.clone();
+				newContext.scope = newScope;
+				analysis(element.expression, newContext, true, false);
 				break;
 
 			case "FunctionDeclaration":
@@ -570,7 +577,10 @@ function analysis(tree, graph, scope, scopeName, partialScope, useNewScope) {
 
 			default:
 				if (element.body) {
-					let resultFunction = analysis(element, result, newScope, scopeName + "LS" + i + CONST_SEPARATOR_ID, true, true);
+					var newContext = context.clone();
+					newContext.scope = newScope;
+					newContext.scopeName = scopeName + "LS" + i + CONST_SEPARATOR_ID;
+					let resultFunction = analysis(element, newContext, true, true);
 					mergeResult(result, resultFunction);
 				}
 				break;
@@ -582,14 +592,17 @@ function analysis(tree, graph, scope, scopeName, partialScope, useNewScope) {
 
 		for (let i=0; i<functions.length; i++) {
 			let element = functions[i];
-			let resultFunction = analysis(element, result, newScope, scopeName + "FS" + i + CONST_SEPARATOR_ID, false, true);
+			var newContext = context.clone();
+			newContext.scope = newScope;
+			newContext.scopeName = scopeName + "FS" + i + CONST_SEPARATOR_ID;
+			let resultFunction = analysis(element, newContext, false, true);
 
 			mergeResult(result, resultFunction);
 		}
 
 	}
 
-	return result;
+	return context;
 }
 
 exportFnct.analysis = analysis;

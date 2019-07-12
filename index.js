@@ -63,7 +63,7 @@ function getEndpoints(code, options) {
 	var endpoints = [];
 	var tree = acorn.parse(code);
 	
-	utils.analysis(tree, graph);
+	utils.analysis(tree, new Context(graph));
 
 	for (let i=0; i<result.invocations.length; i++) {
 		let fnctInvocation = result.invocations[i];

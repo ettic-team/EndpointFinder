@@ -22,6 +22,7 @@ function getInstance(options) {
 		}
 
 		nodes[node.id] = node;
+		return node;
 	}
 	self.addNode = addNode;
 
@@ -29,6 +30,11 @@ function getInstance(options) {
 		return nodes[nodeId];
 	}
 	self.getNode = getNode;
+
+	function getNodes() {
+		return Object.values(nodes);
+	}
+	self.getNodes = getNodes;
 
 	function linkNodeToNode(node1, node2) {
 		node1.equivalence.push(node2);
@@ -50,17 +56,34 @@ function getInstance(options) {
 		} 
 
 		invocations[invocation.id] = invocation;
+		return invocation;
 	}
 	self.addInvocation = addInvocation;
+
+	function getInvocation(id) {
+		return invocations[id];
+	}
+	self.getInvocation = getInvocation;
+
+	function getInvocations() {
+		return Object.values(invocations);
+	}
+	self.getInvocations = getInvocations;
 
 	function addValue(value) {
 		if (!value.id) {
 			value.id = generateId();
 		}
 
-		values.push(value);
+		values[value.id]  = value;
+		return value;
 	}
 	self.addValue = addValue;
+
+	function getValue(id) {
+		return values[id];
+	}
+	self.getValue = getValue;
 
 	// INTERNAL
 	function generateId() {
